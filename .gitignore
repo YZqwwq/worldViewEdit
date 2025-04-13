@@ -7,13 +7,31 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# 依赖
 node_modules
+.pnp
+.pnp.js
+
+# 构建输出
 dist
 dist-ssr
+dist-electron
+release
 *.local
 
-# Editor directories and files
+# 测试覆盖率
+coverage
+
+# Electron 构建输出
+release/
+build/
+out/
+
+# 编辑器目录和文件
 .vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
 !.vscode/extensions.json
 .idea
 .DS_Store
@@ -22,3 +40,18 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# 本地环境文件
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 锁文件 (可选，如果你想要团队成员使用相同的依赖版本，可以取消注释)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# 调试文件
+.chrome
