@@ -12,8 +12,10 @@ const selectedTitle = ref('');
 // 监听主题变化事件
 function handleThemeChange(event: CustomEvent) {
   console.log('ShowPanel组件检测到主题变化:', event.detail.theme);
-  // 强制组件刷新以应用新主题
-  refreshComponent();
+  // 在下一个微任务中执行DOM更新，确保CSS变量已应用
+  setTimeout(() => {
+    refreshComponent();
+  }, 0);
 }
 
 // 强制组件刷新
@@ -24,12 +26,17 @@ function refreshComponent() {
 
 // 监听事件
 onMounted(() => {
+  // 添加主题变化监听
   document.addEventListener('theme-changed', handleThemeChange as EventListener);
   
   // 根据activeItem设置初始选中标题
   if (props.activeItem.startsWith('世界观:')) {
     selectedTitle.value = props.activeItem.substring(4);
   }
+  
+  // 初始化时记录当前主题
+  const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+  console.log('ShowPanel组件初始化，当前主题:', currentTheme);
 });
 
 onBeforeUnmount(() => {
@@ -243,13 +250,13 @@ function getFunctionalName(key: string | null): string {
   padding: 20px;
   border-radius: 10px;
   background-color: var(--bg-secondary);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--box-shadow);
   cursor: pointer;
   transition: transform 0.3s, box-shadow 0.3s, background-color 0.3s;
   
   &:hover {
     transform: translateY(-5px);
-    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.25);
     background-color: var(--bg-hover);
   }
   

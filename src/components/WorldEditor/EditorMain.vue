@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineProps, defineEmits, ref, watch, onMounted } from 'vue';
+import { defineProps, defineEmits, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import type { WorldData } from '../../electron';
 
 // 定义接收的属性
@@ -20,6 +20,20 @@ const emit = defineEmits<{
 // 编辑器内容
 const editorContent = ref('');
 
+// 组件刷新机制
+const componentKey = ref(0);
+function refreshComponent() {
+  componentKey.value += 1;
+}
+
+// 监听主题变化事件
+function handleThemeChange(event: CustomEvent) {
+  console.log('EditorMain组件检测到主题变化:', event.detail.theme);
+  setTimeout(() => {
+    refreshComponent();
+  }, 0);
+}
+
 // 当选中的项目变化时，自动滚动到对应标题位置
 watch(() => props.activeItem, (newValue) => {
   if (newValue.startsWith('世界观:')) {
@@ -30,6 +44,9 @@ watch(() => props.activeItem, (newValue) => {
 
 // 在组件挂载后初始化内容
 onMounted(() => {
+  // 添加主题变化监听
+  document.addEventListener('theme-changed', handleThemeChange as EventListener);
+  
   // 初始化编辑器内容
   if (!props.isLoading && props.worldData.content && props.worldData.content.markdown) {
     editorContent.value = props.worldData.content.markdown;
@@ -70,6 +87,14 @@ onMounted(() => {
   
   // 初始提取标题
   extractTitlesFromContent();
+  
+  // 初始化时记录当前主题
+  const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+  console.log('EditorMain组件初始化，当前主题:', currentTheme);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('theme-changed', handleThemeChange as EventListener);
 });
 
 // 滚动到指定标题
@@ -144,7 +169,7 @@ function goBack() {
 </script>
 
 <template>
-  <div class="editor-main">
+  <div class="editor-main" :key="componentKey">
     <div class="editor-content">
       <!-- 加载状态或错误信息 -->
       <div v-if="isLoading" class="loading-state">
@@ -199,7 +224,7 @@ function goBack() {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  background-color: #fff;
+  background-color: var(--bg-primary);
   overflow-y: auto;
 }
 
@@ -215,7 +240,7 @@ function goBack() {
 
 .world-title {
   font-size: 28px;
-  color: #333;
+  color: var(--text-primary);
   margin-bottom: 10px;
 }
 
@@ -226,7 +251,7 @@ function goBack() {
 }
 
 .world-info {
-  background-color: #f5f5f5;
+  background-color: var(--bg-secondary);
   padding: 15px;
   border-radius: 4px;
   margin-bottom: 20px;
@@ -235,7 +260,7 @@ function goBack() {
   p {
     margin: 5px 0;
     font-size: 14px;
-    color: #666;
+    color: var(--text-secondary);
   }
 }
 
@@ -244,16 +269,16 @@ function goBack() {
 }
 
 .editor-toolbar {
-  background-color: #f5f5f5;
+  background-color: var(--bg-secondary);
   padding: 10px 15px;
   border-radius: 4px 4px 0 0;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border-color);
   border-bottom: none;
 }
 
 .toolbar-tip {
   font-size: 12px;
-  color: #666;
+  color: var(--text-tertiary);
   font-style: italic;
 }
 
@@ -261,23 +286,25 @@ function goBack() {
   width: 100%;
   min-height: 500px;
   padding: 15px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border-color);
   border-radius: 0 0 4px 4px;
   font-size: 16px;
   line-height: 1.6;
   resize: vertical;
   font-family: 'Courier New', Courier, monospace;
+  background-color: var(--editor-bg);
+  color: var(--editor-text);
   
   &:focus {
-    border-color: #2196F3;
+    border-color: var(--accent-primary);
     outline: none;
   }
 }
 
 .save-button {
   padding: 8px 15px;
-  background-color: #2196F3;
-  color: white;
+  background-color: var(--button-primary-bg);
+  color: var(--button-primary-text);
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -285,7 +312,7 @@ function goBack() {
   transition: background-color 0.3s;
   
   &:hover {
-    background-color: #1976D2;
+    background-color: var(--accent-primary-dark);
   }
 }
 
@@ -301,19 +328,19 @@ function goBack() {
 
 .loading-text {
   font-size: 18px;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .error-text {
   font-size: 18px;
-  color: #f44336;
+  color: var(--error);
   margin-bottom: 20px;
 }
 
 .back-to-home-button {
   padding: 8px 16px;
-  background-color: #2196F3;
-  color: white;
+  background-color: var(--button-primary-bg);
+  color: var(--button-primary-text);
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -321,7 +348,7 @@ function goBack() {
   transition: background-color 0.3s;
   
   &:hover {
-    background-color: #1976D2;
+    background-color: var(--accent-primary-dark);
   }
 }
 </style> 

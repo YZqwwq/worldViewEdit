@@ -26,9 +26,17 @@ watch(() => props.activeItem, (newValue) => {
 });
 
 // 监听主题变化事件
+const componentKey = ref(0);
+function refreshComponent() {
+  componentKey.value += 1;
+}
+
 function handleThemeChange(event: CustomEvent) {
   console.log('侧边栏组件检测到主题变化:', event.detail.theme);
-  // 这里可以添加任何特定于侧边栏的主题响应逻辑
+  // 在下一个微任务中执行DOM更新，确保CSS变量已应用
+  setTimeout(() => {
+    refreshComponent();
+  }, 0);
 }
 
 // 监听事件
@@ -79,7 +87,7 @@ function getTitleDisplayText(title: string, level: number) {
 </script>
 
 <template>
-  <div class="editor-sidebar">
+  <div class="editor-sidebar" :key="componentKey">
     <div class="editor-title">
       Fantya world editor
     </div>
@@ -162,7 +170,7 @@ function getTitleDisplayText(title: string, level: number) {
   left: 0;
   top: 0;
   z-index: 100;
-  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--box-shadow);
   border-right: 1px solid var(--border-color);
   transition: background-color 0.3s, color 0.3s, border-color 0.3s;
 }
@@ -301,7 +309,7 @@ function getTitleDisplayText(title: string, level: number) {
   font-size: 14px;
   
   &:hover {
-    background-color: #d32f2f;
+    background-color: var(--error-dark);
   }
 }
 </style> 
