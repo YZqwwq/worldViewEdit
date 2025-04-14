@@ -13,7 +13,6 @@
   -moz-osx-font-smoothing: grayscale;
 
   --sidebar-width: 200px; /* 侧边栏宽度全局变量 */
-  --recent-files-margin-top: 40px; /* 最近文件区域上边距 */
 }
 
 a {

@@ -1,5 +1,24 @@
 <script setup lang="ts">
+import { inject } from 'vue';
 
+// 尝试从App组件注入settingsDialog引用
+const openSettings = inject('openSettings', () => {
+  console.warn('openSettings方法未注入，使用替代方案');
+  // 如果没有注入，尝试通过菜单API打开
+  if (window.electronAPI && window.electronAPI.menu) {
+    window.electronAPI.menu.onMenuAction((action: string) => {
+      if (action === 'open-settings') {
+        console.log('通过菜单API打开设置');
+      }
+    });
+  }
+});
+
+// 点击设置时的处理函数
+function handleSettingsClick() {
+  console.log('点击设置选项');
+  openSettings();
+}
 </script>
 
 <template>
@@ -13,7 +32,7 @@
     <!-- 设置部分 -->
     <div class="settings-section">
       <div class="divider"></div>
-      <div class="settings-content">
+      <div class="settings-content" @click="handleSettingsClick">
         <span>设置</span>
       </div>
     </div>
@@ -23,7 +42,7 @@
 <style lang="scss" scoped>
 .sidebar {
   width: var(--sidebar-width);
-  background-color: #ebebeb;
+  background-color: var(--sidebar-bg);
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -39,11 +58,12 @@
   font-size: 18px;
   position: relative;
   top: 25px;
+  color: var(--text-primary);
 }
 
 .divider {
   height: 1px;
-  background-color: #000;
+  background-color: var(--border-color);
   margin: 0;
 }
 
@@ -56,6 +76,7 @@
     
     span {
       font-size: 16px;
+      color: var(--text-primary);
     }
   }
 }

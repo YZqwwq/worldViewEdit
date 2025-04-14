@@ -1,14 +1,20 @@
 {
-  "name": "vite-demo",
+  "name": "worldViewEdit",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "version": "0.1.0",
+  "type": "commonjs",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:dev": "concurrently \"npm run dev\" \"electron .\"",
+    "electron:build": "npm run build && electron-builder",
+    "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "@electron/remote": "^2.1.2",
+    "electron-store": "^10.0.1",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
@@ -16,9 +22,41 @@
     "@types/node": "^22.13.10",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/tsconfig": "^0.7.0",
+    "concurrently": "^8.2.2",
+    "electron": "^35.1.5",
+    "electron-builder": "^26.0.12",
     "sass": "^1.85.1",
     "typescript": "~5.7.2",
     "vite": "^6.1.0",
     "vue-tsc": "^2.2.0"
+  },
+  "build": {
+    "appId": "com.yzqwwq.worldviewedit",
+    "productName": "WorldViewEdit",
+    "directories": {
+      "output": "release/"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "public/app-icon.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "public/app-icon.icns"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "public/app-icon.png"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ]
   }
 }

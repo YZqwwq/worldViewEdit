@@ -1,0 +1,255 @@
+/**
+ * 主题样式定义
+ */
+
+// 浅色主题变量
+:root, 
+:root[data-theme='light'],
+.theme-light {
+  // 背景色
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #e0e0e0;
+  
+  // 前景色
+  --text-primary: #333333;
+  --text-secondary: #666666;
+  --text-tertiary: #999999;
+  --text-inverse: #ffffff;
+  
+  // 边框色
+  --border-color: #e0e0e0;
+  --border-color-light: #eeeeee;
+  
+  // 强调色
+  --accent-primary: #2196F3;
+  --accent-secondary: #1976D2;
+  --accent-tertiary: #E3F2FD;
+  
+  // 状态色
+  --error: #f44336;
+  --warning: #ff9800;
+  --success: #4caf50;
+  --info: #2196f3;
+  
+  // 组件颜色
+  --sidebar-bg: #ffffff;
+  --sidebar-text: #333333;
+  --sidebar-active-bg: #e8f4fc;
+  --sidebar-active-text: #2196F3;
+  --sidebar-hover-bg: #f5f5f5;
+  
+  --editor-bg: #ffffff;
+  --editor-text: #333333;
+  --editor-line-number: #aaaaaa;
+  --editor-cursor: #2196F3;
+  --editor-selection: rgba(33, 150, 243, 0.2);
+  
+  --dialog-bg: #ffffff;
+  --dialog-overlay: rgba(0, 0, 0, 0.5);
+  
+  --button-primary-bg: #2196F3;
+  --button-primary-text: white;
+  --button-secondary-bg: #f5f5f5;
+  --button-secondary-text: #333333;
+  
+  // 其他
+  --box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  --transition-time: 0.3s;
+}
+
+// 深色主题变量
+:root[data-theme='dark'],
+.theme-dark {
+  // 背景色
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #252525;
+  --bg-tertiary: #333333;
+  
+  // 前景色
+  --text-primary: #e0e0e0;
+  --text-secondary: #b0b0b0;
+  --text-tertiary: #808080;
+  --text-inverse: #1e1e1e;
+  
+  // 边框色
+  --border-color: #444444;
+  --border-color-light: #555555;
+  
+  // 强调色
+  --accent-primary: #64b5f6; // 浅一点的蓝色
+  --accent-secondary: #42a5f5;
+  --accent-tertiary: #1e3c61;
+  
+  // 状态色
+  --error: #ef5350;
+  --warning: #ffb74d;
+  --success: #66bb6a;
+  --info: #42a5f5;
+  
+  // 组件颜色
+  --sidebar-bg: #252525;
+  --sidebar-text: #e0e0e0;
+  --sidebar-active-bg: #1e3c61;
+  --sidebar-active-text: #64b5f6;
+  --sidebar-hover-bg: #333333;
+  
+  --editor-bg: #1e1e1e;
+  --editor-text: #e0e0e0;
+  --editor-line-number: #6d6d6d;
+  --editor-cursor: #64b5f6;
+  --editor-selection: rgba(100, 181, 246, 0.3);
+  
+  --dialog-bg: #252525;
+  --dialog-overlay: rgba(0, 0, 0, 0.7);
+  
+  --button-primary-bg: #42a5f5;
+  --button-primary-text: white;
+  --button-secondary-bg: #444444;
+  --button-secondary-text: #e0e0e0;
+  
+  // 其他
+  --box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  --transition-time: 0.3s;
+}
+
+// 编辑器内部元素颜色
+.theme-light {
+  .editor-sidebar {
+    background-color: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    border-right: 1px solid var(--border-color);
+    
+    .nav-item {
+      border-bottom: 1px solid var(--border-color-light);
+      
+      &:hover {
+        background-color: var(--sidebar-hover-bg);
+      }
+      
+      &.active {
+        background-color: var(--sidebar-active-bg);
+        color: var(--sidebar-active-text);
+      }
+    }
+    
+    .sub-menu {
+      background-color: var(--bg-secondary);
+    }
+  }
+  
+  .editor-main {
+    background-color: var(--bg-primary);
+  }
+  
+  .content-editor {
+    background-color: var(--editor-bg);
+    color: var(--editor-text);
+    border-color: var(--border-color);
+  }
+}
+
+.theme-dark {
+  .editor-sidebar {
+    background-color: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    border-right: 1px solid var(--border-color);
+    
+    .nav-item {
+      border-bottom: 1px solid var(--border-color);
+      
+      &:hover {
+        background-color: var(--sidebar-hover-bg);
+      }
+      
+      &.active {
+        background-color: var(--sidebar-active-bg);
+        color: var(--sidebar-active-text);
+      }
+    }
+    
+    .sub-menu {
+      background-color: var(--bg-tertiary);
+    }
+  }
+  
+  .editor-main {
+    background-color: var(--bg-primary);
+  }
+  
+  .content-editor {
+    background-color: var(--editor-bg);
+    color: var(--editor-text);
+    border-color: var(--border-color);
+  }
+}
+
+// 对话框样式
+.settings-dialog {
+  background-color: var(--dialog-bg);
+  box-shadow: var(--box-shadow);
+  
+  .settings-header {
+    border-bottom: 1px solid var(--border-color);
+    
+    h2 {
+      color: var(--text-primary);
+    }
+    
+    .close-button {
+      color: var(--text-secondary);
+      
+      &:hover {
+        color: var(--text-primary);
+      }
+    }
+  }
+  
+  .settings-content {
+    .settings-group h3 {
+      color: var(--text-primary);
+      border-bottom: 1px solid var(--border-color-light);
+    }
+    
+    .setting-item label {
+      color: var(--text-secondary);
+    }
+    
+    select, input[type="range"] {
+      border-color: var(--border-color);
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+    }
+    
+    .setting-value {
+      color: var(--text-secondary);
+    }
+  }
+  
+  .settings-footer {
+    border-top: 1px solid var(--border-color);
+    
+    .cancel-button {
+      background-color: var(--button-secondary-bg);
+      color: var(--button-secondary-text);
+    }
+    
+    .save-button {
+      background-color: var(--button-primary-bg);
+      color: var(--button-primary-text);
+    }
+  }
+}
+
+// 转场动画
+body {
+  transition: 
+    background-color var(--transition-time) ease,
+    color var(--transition-time) ease;
+}
+
+* {
+  transition: 
+    background-color var(--transition-time) ease,
+    border-color var(--transition-time) ease;
+} 

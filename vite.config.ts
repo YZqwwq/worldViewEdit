@@ -12,7 +12,7 @@ export default defineConfig({
     }
   },
   server: {
-    port: 5175,
+    port: 5178,
     strictPort: true, // 如果端口被占用，则直接退出
   },
   build: {
