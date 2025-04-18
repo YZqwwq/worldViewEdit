@@ -14,6 +14,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'back'): void,
   (e: 'updateContent', content: string): void,
+  (e: 'updateWorldData', worldData: WorldData): void,
   (e: 'extractTitles', titles: {title: string, level: number, position: number}[]): void
 }>();
 
@@ -48,8 +49,50 @@ onMounted(() => {
   document.addEventListener('theme-changed', handleThemeChange as EventListener);
   
   // 初始化编辑器内容
-  if (!props.isLoading && props.worldData.content && props.worldData.content.markdown) {
-    editorContent.value = props.worldData.content.markdown;
+  if (!props.isLoading && props.worldData.content) {
+    // 优先从main_setting_of_the_worldview中获取内容
+    if (props.worldData.content.main_setting_of_the_worldview?.content?.text) {
+      editorContent.value = props.worldData.content.main_setting_of_the_worldview.content.text;
+    } 
+    // 兼容旧版数据，尝试加载markdown字段
+    else if (props.worldData.content.markdown) {
+      editorContent.value = props.worldData.content.markdown;
+    } 
+    // 都没有则使用默认模板
+    else {
+      // 提供默认模板
+      editorContent.value = 
+`# ${props.worldData.name || '世界观名称'}
+
+## 背景设定
+
+在这里描述世界的基本背景和设定...
+
+## 主要时间线
+
+### 远古时代
+
+远古时代的重要事件...
+
+### 中世纪
+
+中世纪的重要事件...
+
+## 世界规则
+
+### 魔法系统
+
+这个世界的魔法是如何运作的...
+
+### 科技水平
+
+这个世界的科技发展到了什么程度...
+
+## 重要地点
+
+## 重要人物
+`;
+    }
   } else {
     // 提供默认模板
     editorContent.value = 
@@ -159,7 +202,28 @@ function handleContentChange() {
 
 // 保存内容
 function saveContent() {
-  emit('updateContent', editorContent.value);
+  // 创建当前时间戳
+  const now = new Date().toISOString();
+  
+  // 准备要更新的完整世界观数据
+  const updatedWorldData: WorldData = {
+    ...props.worldData,
+    updatedAt: now,
+    content: {
+      ...props.worldData.content,
+      main_setting_of_the_worldview: {
+        updatedAt: now,
+        content: {
+          text: editorContent.value
+        }
+      }
+    }
+  };
+  
+  // 发送更新整个世界观数据的事件
+  emit('updateWorldData', updatedWorldData);
+  
+  console.log('保存的世界观数据:', updatedWorldData);
 }
 
 // 返回主页面

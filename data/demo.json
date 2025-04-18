@@ -1,0 +1,21 @@
+{
+    "id": "1744643956150",
+    "name": "2",
+    "createdAt": "2025-04-14T15:19:16.150Z",
+    "updatedAt": "2025-04-14T15:19:16.150Z",
+    "description": "",
+    "content": {
+        "main_setting_of_the_worldview": {
+            "updatedAt": "2025-04-14T15:19:16.150Z",
+            "content": {
+                "text": "这是内容"
+            }
+        },
+        "worldmaps": {
+
+        },
+        "characters": {
+
+        }
+    }
+  }

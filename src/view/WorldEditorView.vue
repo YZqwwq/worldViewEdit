@@ -93,19 +93,92 @@ function handleExtractTitles(titles: Array<{title: string, level: number, positi
 }
 
 // 处理内容更新
-function handleUpdateContent(content: string) {
-  console.log('更新内容, 长度:', content.length);
+function handleUpdateContent(content: any) {
+  console.log('更新内容，对象类型:', typeof content);
   
-  // 更新世界观数据
-  if (!worldData.value.content) {
-    worldData.value.content = {};
+  try {
+    // 更新世界观数据
+    if (!worldData.value.content) {
+      worldData.value.content = {};
+    }
+    
+    // 确保content是对象类型
+    if (typeof content === 'string') {
+      try {
+        // 尝试将字符串解析为JSON对象
+        content = JSON.parse(content);
+      } catch (parseError) {
+        console.error('解析内容字符串失败:', parseError);
+        // 如果解析失败，将内容保存到main_setting_of_the_worldview中
+        if (!worldData.value.content.main_setting_of_the_worldview) {
+          worldData.value.content.main_setting_of_the_worldview = {
+            updatedAt: new Date().toISOString(),
+            content: { text: content }
+          };
+        } else {
+          worldData.value.content.main_setting_of_the_worldview.updatedAt = new Date().toISOString();
+          worldData.value.content.main_setting_of_the_worldview.content = { text: content };
+        }
+        worldData.value.updatedAt = new Date().toISOString();
+        saveWorldData();
+        return;
+      }
+    }
+    
+    // 将内容合并到worldData.content中
+    worldData.value.content = {
+      ...content,
+      // 确保main_setting_of_the_worldview存在
+      main_setting_of_the_worldview: {
+        updatedAt: new Date().toISOString(),
+        content: content.main_setting_of_the_worldview?.content || {}
+      },
+      // 确保worldmaps存在
+      worldmaps: content.worldmaps || {},
+      // 确保characters存在
+      characters: content.characters || {}
+    };
+    
+    console.log('结构化内容已更新:', worldData.value.content);
+  } catch (error) {
+    console.error('处理内容更新失败:', error);
+    
+    // 如果发生其他错误，尝试作为纯文本处理
+    if (typeof content === 'string') {
+      if (!worldData.value.content) {
+        worldData.value.content = { 
+          main_setting_of_the_worldview: {
+            updatedAt: new Date().toISOString(),
+            content: { text: content }
+          }
+        };
+      } else {
+        if (!worldData.value.content.main_setting_of_the_worldview) {
+          worldData.value.content.main_setting_of_the_worldview = {
+            updatedAt: new Date().toISOString(),
+            content: { text: content }
+          };
+        } else {
+          worldData.value.content.main_setting_of_the_worldview.content = { text: content };
+          worldData.value.content.main_setting_of_the_worldview.updatedAt = new Date().toISOString();
+        }
+      }
+    }
   }
-  
-  // 保存Markdown内容
-  worldData.value.content.markdown = content;
   
   // 更新时间戳
   worldData.value.updatedAt = new Date().toISOString();
+  
+  // 保存更新后的数据
+  saveWorldData();
+}
+
+// 处理完整世界观数据更新
+function handleUpdateWorldData(updatedData: WorldData) {
+  console.log('接收到完整世界观数据更新');
+  
+  // 直接使用更新的世界观数据
+  worldData.value = updatedData;
   
   // 保存更新后的数据
   saveWorldData();
@@ -115,8 +188,11 @@ function handleUpdateContent(content: string) {
 async function saveWorldData() {
   try {
     if (window.electronAPI && worldId.value) {
+      // 将Vue响应式对象转换为普通JavaScript对象
+      const plainData = JSON.parse(JSON.stringify(worldData.value));
+      
       // 使用Electron API保存数据
-      await window.electronAPI.data.saveFile(`world_${worldId.value}.json`, worldData.value);
+      await window.electronAPI.data.saveFile(`world_${worldId.value}.json`, plainData);
       console.log('世界观数据保存成功');
     } else {
       console.warn('无法保存数据，electronAPI不可用或worldId为空');
@@ -150,6 +226,7 @@ function goBack() {
       :activeItem="activeItem"
       @back="goBack"
       @updateContent="handleUpdateContent"
+      @updateWorldData="handleUpdateWorldData"
       @extractTitles="handleExtractTitles"
     />
   </div>

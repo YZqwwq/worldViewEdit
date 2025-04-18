@@ -23,22 +23,64 @@ const api = {
       }
       
       // 确保内容可序列化
-      let safeContent = content;
+      let safeContent;
       
-      // 检查内容是否包含不可序列化的对象
+      // 尝试克隆对象以确保安全序列化
       try {
-        // 尝试序列化，如果失败则进行处理
-        JSON.stringify(content);
+        // 递归克隆和清理对象
+        const deepClone = (obj) => {
+          if (obj === null || obj === undefined) {
+            return obj;
+          }
+          
+          // 处理基本类型
+          if (typeof obj !== 'object') {
+            return obj;
+          }
+          
+          // 处理数组
+          if (Array.isArray(obj)) {
+            return obj.map(item => deepClone(item));
+          }
+          
+          // 处理日期
+          if (obj instanceof Date) {
+            return obj.toISOString();
+          }
+          
+          // 处理对象
+          const result = {};
+          for (const key in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, key)) {
+              try {
+                // 忽略函数和Symbol
+                const value = obj[key];
+                if (typeof value !== 'function' && typeof value !== 'symbol') {
+                  result[key] = deepClone(value);
+                }
+              } catch (err) {
+                console.error(`处理属性 ${key} 时出错`, err);
+              }
+            }
+          }
+          return result;
+        };
+        
+        safeContent = deepClone(content);
+        
+        // 最终确认可序列化
+        JSON.stringify(safeContent);
       } catch (serializationError) {
         console.error(`内容序列化失败:`, serializationError);
-        // 创建一个简单的可序列化副本
+        // 如果深度克隆失败，使用浅层复制
         safeContent = {};
-        // 只复制可枚举的基本属性
         for (const key in content) {
           try {
-            const value = content[key];
-            if (typeof value !== 'function' && typeof value !== 'symbol') {
-              safeContent[key] = value;
+            if (Object.prototype.hasOwnProperty.call(content, key)) {
+              const value = content[key];
+              if (typeof value !== 'function' && typeof value !== 'symbol') {
+                safeContent[key] = value;
+              }
             }
           } catch (err) {
             console.error(`处理属性 ${key} 时出错`, err);

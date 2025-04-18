@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { defineProps, defineEmits, ref, watch, onMounted, onBeforeUnmount } from 'vue';
-import type { ThemeType } from '../../utils/themeManager';
 
 // 定义接收的属性
 const props = defineProps<{
@@ -20,9 +19,7 @@ const isWorldExpanded = ref(false);
 
 // 自动展开侧边栏
 watch(() => props.activeItem, (newValue) => {
-  if (newValue.startsWith('世界观:')) {
-    isWorldExpanded.value = true;
-  }
+
 });
 
 // 监听主题变化事件
@@ -48,12 +45,16 @@ onBeforeUnmount(() => {
   document.removeEventListener('theme-changed', handleThemeChange as EventListener);
 });
 
-// 切换世界观展开状态
-function toggleWorldExpand() {
-  isWorldExpanded.value = !isWorldExpanded.value;
-  if (!isWorldExpanded.value) {
+
+// 处理世界观点击
+function handleWorldClick() {
+  // 如果当前不是世界观项，则先设置为世界观
+  if (props.activeItem !== '世界观') {
     setActiveItem('世界观');
   }
+  
+  // 切换展开/折叠状态（无论是否为活动项）
+  isWorldExpanded.value = !isWorldExpanded.value;
 }
 
 // 切换选中项
@@ -99,10 +100,10 @@ function getTitleDisplayText(title: string, level: number) {
         <div 
           class="nav-item with-arrow" 
           :class="{ 
-            active: activeItem === '世界观' || activeItem.startsWith('世界观:'),
+            active: activeItem === '世界观',
             expanded: isWorldExpanded
           }"
-          @click="toggleWorldExpand"
+          @click="handleWorldClick"
         >
           <span>世界观</span>
           <span class="arrow">{{ isWorldExpanded ? '▼' : '▶' }}</span>
