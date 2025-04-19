@@ -5,6 +5,7 @@
 
 import { editorSchema } from './schema';
 import { defaultMarkdownParser, defaultMarkdownSerializer, MarkdownParser, MarkdownSerializer } from 'prosemirror-markdown';
+import { Node } from 'prosemirror-model';
 
 // 预处理Markdown内容，支持没有空格的标题格式
 export function preprocessMarkdown(content: string): string {
@@ -38,7 +39,18 @@ export const markdownSerializer = new MarkdownSerializer(
     ...defaultMarkdownSerializer.nodes,
     // 自定义节点序列化
     heading: (state, node) => {
+      // 如果标题为空，不生成标题标记
+      if (node.content.size === 0) {
+        state.renderContent(node);
+        return;
+      }
+      
       state.write('#'.repeat(node.attrs.level) + ' ');
+      state.renderInline(node);
+      state.closeBlock(node);
+    },
+    // 确保段落序列化不包含多余的空行
+    paragraph: (state, node) => {
       state.renderInline(node);
       state.closeBlock(node);
     }
@@ -63,7 +75,7 @@ export function parseMarkdown(markdown: string) {
 }
 
 // 将ProseMirror文档序列化为Markdown
-export function serializeToMarkdown(doc: any) {
+export function serializeToMarkdown(doc: Node) {
   return markdownSerializer.serialize(doc);
 }
 

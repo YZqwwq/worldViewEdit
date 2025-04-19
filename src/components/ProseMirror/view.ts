@@ -14,11 +14,12 @@ export interface CustomViewProps {
   onUpdate?: (markdown: string, state: EditorState) => void;
   attributes?: { [key: string]: string };
   editable?: boolean;
+  handleKeyDown?: (view: EditorView, event: KeyboardEvent) => boolean;
 }
 
 // 创建编辑器视图
 export function createEditorView(props: CustomViewProps): EditorView {
-  const { container, state, onUpdate, attributes = {}, editable = true } = props;
+  const { container, state, onUpdate, attributes = {}, editable = true, handleKeyDown } = props;
   
   // 创建视图
   const view = new EditorView(container, {
@@ -37,7 +38,9 @@ export function createEditorView(props: CustomViewProps): EditorView {
     // 添加自定义属性
     attributes,
     // 设置是否可编辑
-    editable: () => editable
+    editable: () => editable,
+    // 处理键盘事件
+    handleKeyDown: handleKeyDown
   });
   
   // 应用一些基本样式

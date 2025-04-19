@@ -3,7 +3,7 @@
  * 用于创建和管理编辑器状态
  */
 
-import { EditorState, Plugin } from 'prosemirror-state';
+import { EditorState, Plugin, Transaction } from 'prosemirror-state';
 import { keymap } from 'prosemirror-keymap';
 import { baseKeymap } from 'prosemirror-commands';
 import { editorSchema } from './schema';
@@ -36,10 +36,39 @@ function buildMdInputRules(schema: any) {
   return inputRules({ rules });
 }
 
+// 创建自定义退格键处理
+function createBackspaceKeyMap(schema: any) {
+  return keymap({
+    'Backspace': (state: EditorState, dispatch?: (tr: Transaction) => void) => {
+      const { selection, doc } = state;
+      const { $from, empty } = selection;
+      
+      // 只有当选择为空（光标位置）且在段落最开始位置时才应用
+      if (!empty || $from.parentOffset > 0) return false;
+      
+      // 获取当前节点
+      const node = $from.node();
+      
+      // 如果是标题节点并且内容为空，转换为普通段落
+      if (node.type === schema.nodes.heading && node.textContent.trim() === '') {
+        if (dispatch) {
+          const tr = state.tr.setBlockType($from.pos, $from.pos, schema.nodes.paragraph);
+          dispatch(tr);
+        }
+        return true;
+      }
+      
+      // 其他情况交给默认处理
+      return false;
+    }
+  });
+}
+
 // 创建基本插件数组
 export function createPlugins(extraPlugins: Plugin[] = []) {
   return [
     buildMdInputRules(editorSchema),  // 添加输入规则（如# 空格自动转为标题）
+    createBackspaceKeyMap(editorSchema), // 添加自定义退格键处理
     keymap(baseKeymap),               // 基本按键映射
     dropCursor(),                     // 拖放时显示光标位置
     gapCursor(),                      // 支持在块元素间的光标

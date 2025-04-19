@@ -41,14 +41,48 @@ onMounted(() => {
       class: 'custom-prosemirror-editor',
       spellcheck: 'false'  // 禁用拼写检查，避免产生波浪线边框
     },
-    editable: true
+    editable: true,
+    // 添加键盘事件监听
+    handleKeyDown: (view: EditorView, event: KeyboardEvent) => {
+      // 在这里处理特殊的键盘事件
+      // 如果已经在state.ts中处理了则不需要这里重复处理
+      return false; // 返回false允许继续处理事件
+    }
   });
 
   // 添加placeholder效果
   if (props.placeholder && props.modelValue === '') {
     addPlaceholder();
   }
+  
+  // 为编辑器容器添加键盘事件监听
+  if (editorRef.value) {
+    editorRef.value.addEventListener('keydown', handleKeyDown);
+  }
 });
+
+// 处理键盘事件
+function handleKeyDown(event: KeyboardEvent) {
+  if (!editorView) return;
+  
+  // 如果是退格键，检查当前光标位置是否在标题开始
+  if (event.key === 'Backspace') {
+    const { selection, schema } = editorView.state;
+    const { $from, empty } = selection;
+    
+    // 选择为空且位于块的开始位置
+    if (empty && $from.parentOffset === 0) {
+      const node = $from.node();
+      
+      // 如果是标题节点，自定义处理已在state.ts中完成
+      // 这里只是为了可能需要的其他处理
+      if (node.type === schema.nodes.heading) {
+        // 特定情况的额外处理可以放在这里
+        console.log('检测到退格键在标题开始处');
+      }
+    }
+  }
+}
 
 // 监听modelValue变化，更新编辑器内容
 watch(() => props.modelValue, (newValue, oldValue) => {
@@ -92,8 +126,11 @@ function removePlaceholder() {
   editorRef.value.classList.remove('has-placeholder');
 }
 
-// 组件卸载时销毁编辑器
+// 组件卸载时销毁编辑器和事件监听
 onBeforeUnmount(() => {
+  if (editorRef.value) {
+    editorRef.value.removeEventListener('keydown', handleKeyDown);
+  }
   destroyView(editorView);
   editorView = null;
 });
