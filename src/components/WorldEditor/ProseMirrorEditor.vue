@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { EditorView } from 'prosemirror-view';
+import { EditorState, TextSelection } from 'prosemirror-state';
 import { 
   createDefaultState, 
   createEditorView, 
@@ -58,8 +59,38 @@ onMounted(() => {
   // 为编辑器容器添加键盘事件监听
   if (editorRef.value) {
     editorRef.value.addEventListener('keydown', handleKeyDown);
+    
+    // 添加点击事件监听，处理空白区域点击
+    editorRef.value.addEventListener('click', handleEditorClick);
   }
 });
+
+// 处理编辑器点击事件
+function handleEditorClick(event: MouseEvent) {
+  if (!editorView) return;
+  
+  // 获取ProseMirror根DOM节点
+  const editorDom = editorView.dom;
+  
+  // 检查点击是否在内容区域内
+  if (editorDom && event.target === editorDom) {
+    // 点击的是空白区域，将光标移动到文档末尾
+    const { state } = editorView;
+    const { tr } = state;
+    const endPos = state.doc.content.size;
+    
+    // 创建一个光标在文档末尾的事务
+    // 使用TextSelection创建文本选择
+    const endSelection = TextSelection.create(state.doc, endPos);
+    const transaction = tr.setSelection(endSelection);
+    
+    // 应用事务
+    editorView.dispatch(transaction);
+    
+    // 聚焦编辑器
+    editorView.focus();
+  }
+}
 
 // 处理键盘事件
 function handleKeyDown(event: KeyboardEvent) {
@@ -130,6 +161,7 @@ function removePlaceholder() {
 onBeforeUnmount(() => {
   if (editorRef.value) {
     editorRef.value.removeEventListener('keydown', handleKeyDown);
+    editorRef.value.removeEventListener('click', handleEditorClick);
   }
   destroyView(editorView);
   editorView = null;
@@ -156,11 +188,16 @@ defineExpose({
 <style lang="scss">
 .prosemirror-editor-container {
   width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
   
   .prosemirror-editor {
     width: 100%;
     min-height: 500px;
-    padding: 15px;
+    height: 100%;
+    flex: 1;
+    padding: 30px 50px; /* 增加内边距，左右更宽松 */
     border: 1px solid var(--border-color);
     border-radius: 0 0 4px 4px;
     font-size: 16px;
@@ -170,6 +207,16 @@ defineExpose({
     color: var(--editor-text);
     outline: none;
     white-space: pre-wrap; /* 解决ProseMirror的CSS white-space警告 */
+    overflow-y: auto; /* 添加垂直滚动条 */
+    position: relative; /* 确保相对定位，使绝对定位的子元素能够正确定位 */
+    
+    /* 确保编辑器填充整个容器空间 */
+    .ProseMirror {
+      height: 100%;
+      min-height: 100%;
+      max-width: 920px; /* 限制内容宽度，提高可读性 */
+      margin: 0 auto; /* 居中显示内容 */
+    }
     
     &:focus {
       border-color: var(--accent-primary);
@@ -225,12 +272,10 @@ defineExpose({
     
     h1 { 
       font-size: 1.8em; 
-      border-bottom: 1px solid var(--border-color);
       padding-bottom: 0.3em;
     }
     h2 { 
       font-size: 1.5em; 
-      border-bottom: 1px solid var(--border-color);
       padding-bottom: 0.2em;
     }
     h3 { font-size: 1.3em; }

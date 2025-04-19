@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineProps, defineEmits, ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import { defineProps, defineEmits, ref, watch, onMounted, onBeforeUnmount, computed } from 'vue';
 import type { WorldData } from '../../electron';
 import ProseMirrorEditor from './ProseMirrorEditor.vue';
 
@@ -91,28 +91,26 @@ function scrollToTitle(titleName: string) {
 
 // 从内容中提取标题
 function extractTitlesFromContent() {
-  const titles: {title: string, level: number, position: number}[] = [];
-  const lines = editorContent.value.split('\n');
+  const content = editorContent.value;
+  if (!content) {
+    emit('extractTitles', []);
+    return;
+  }
   
-  let position = 0;
+  // 使用正则表达式匹配所有标题
+  const titleRegex = /^(#{1,6})\s+(.+)$/gm;
+  const titles = [];
+  let match;
   
-  lines.forEach(line => {
-    // 匹配Markdown标题格式: # 标题、## 标题、### 标题等
-    // 修改正则表达式，使其也支持没有空格的标题格式，如 #标题、##标题
-    const match = line.match(/^(#{1,5})(\s+)?(.+)$/);
-    if (match) {
-      const level = match[1].length; // #的数量表示标题等级
-      const title = match[3].trim();
-      titles.push({
-        title,
-        level,
-        position
-      });
-    }
-    position += line.length + 1; // +1 是换行符
-  });
+  while ((match = titleRegex.exec(content)) !== null) {
+    titles.push({
+      title: match[2].trim(),
+      level: match[1].length,
+      position: match.index
+    });
+  }
   
-  // 发送提取的标题到父组件
+  console.log('提取到标题数量:', titles.length);
   emit('extractTitles', titles);
 }
 
@@ -123,82 +121,79 @@ function handleContentChange() {
 
 // 保存内容
 function saveContent() {
-  // 创建当前时间戳
-  const now = new Date().toISOString();
+  // 提取新的标题
+  extractTitlesFromContent();
   
-  // 准备要更新的完整世界观数据
-  const updatedWorldData: WorldData = {
-    ...props.worldData,
-    updatedAt: now,
-    content: {
-      ...props.worldData.content,
-      main_setting_of_the_worldview: {
-        updatedAt: now,
-        content: {
-          text: editorContent.value
-        }
-      }
-    }
-  };
+  // 更新内容
+  handleContentChange();
   
-  // 发送更新整个世界观数据的事件
-  emit('updateWorldData', updatedWorldData);
-  
-  console.log('保存的世界观数据:', updatedWorldData);
+  console.log('手动保存内容');
 }
 
 // 返回主页面
 function goBack() {
   emit('back');
 }
+
+// 定义是否是世界观内容
+const isWorldviewContent = computed(() => {
+  // 世界观相关的内容
+  return props.activeItem === '世界观' || 
+         props.activeItem.startsWith('世界观:') || 
+         props.activeItem === '地图' ||
+         props.activeItem === '人物';
+});
+
+// 获取标题函数
+function getHeaderTitle() {
+  if (props.activeItem === '世界观') {
+    return '世界观总览';
+  } else if (props.activeItem.startsWith('世界观:')) {
+    return props.activeItem.substring(4); // 移除"世界观:"前缀
+  } else if (props.activeItem === '地图') {
+    return '地图编辑';
+  } else if (props.activeItem === '人物') {
+    return '人物管理';
+  }
+  return props.activeItem;
+}
 </script>
 
 <template>
   <div class="editor-main" :key="componentKey">
-    <div class="editor-content">
-      <!-- 加载状态或错误信息 -->
-      <div v-if="isLoading" class="loading-state">
-        <span class="loading-text">正在加载世界观数据...</span>
-      </div>
-      
-      <div v-else-if="errorMsg" class="error-state">
-        <span class="error-text">{{ errorMsg }}</span>
-        <button class="back-to-home-button" @click="goBack">返回主页</button>
-      </div>
-      
-      <!-- 世界观编辑器 -->
-      <div v-else-if="worldData.id" class="world-editor">
+    <!-- 加载状态 -->
+    <div v-if="isLoading" class="editor-loading">
+      <div class="loading-spinner"></div>
+      <p>正在加载内容...</p>
+    </div>
+    
+    <!-- 错误提示 -->
+    <div v-else-if="errorMsg" class="editor-error">
+      <p>{{ errorMsg }}</p>
+    </div>
+    
+    <!-- 编辑器区域 -->
+    <div v-else class="editor-container">
+      <!-- 世界观内容编辑器 -->
+      <div v-if="isWorldviewContent" class="editor-content-container">
         <div class="editor-header">
-          <h1 class="world-title">{{ worldData.name }}</h1>
-          <div class="world-meta">
-            <div class="world-info">
-              <p>创建时间: {{ new Date(worldData.createdAt).toLocaleString() }}</p>
-              <p>更新时间: {{ new Date(worldData.updatedAt).toLocaleString() }}</p>
-              <p>存储位置: store/world_{{ worldData.id }}.json</p>
-            </div>
-            <div class="action-buttons">
-              <button class="save-button" @click="saveContent">保存内容</button>
-            </div>
-          </div>
+          <h2>{{ getHeaderTitle() }}</h2>
         </div>
         
-        <!-- Markdown编辑区域 -->
-        <div class="markdown-editor">
-          <div class="editor-toolbar">
-            <div class="toolbar-tip">
-              使用 # 创建一级标题，## 创建二级标题，以此类推（最多支持五级标题 #####）
-              <br>注：标题符号与文字之间的空格可选，如 ##标题 或 ## 标题 均有效
-            </div>
-          </div>
-          
-          <!-- 使用ProseMirror编辑器替代textarea -->
-          <ProseMirrorEditor 
+        <div class="editor-content-wrapper">
+          <ProseMirrorEditor
             ref="editorRef"
             v-model="editorContent"
+            placeholder="开始创作你的世界观..."
             @change="handleContentChange"
-            placeholder="在此输入内容，使用Markdown语法创建标题..."
           />
         </div>
+      </div>
+      
+      <!-- 其他内容类型的显示容器 -->
+      <div v-else class="other-content-container">
+        <!-- 这里可以根据activeItem显示不同的内容编辑组件 -->
+        <p>{{ activeItem }} 编辑器开发中...</p>
       </div>
     </div>
   </div>
@@ -206,117 +201,98 @@ function goBack() {
 
 <style lang="scss" scoped>
 .editor-main {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  background-color: var(--bg-primary);
-  overflow-y: auto;
-}
-
-.editor-content {
-  width: 100%;
-  max-width: 1000px;
-  padding: 20px;
-}
-
-.editor-header {
-  margin-bottom: 30px;
-}
-
-.world-title {
-  font-size: 28px;
-  color: var(--text-primary);
-  margin-bottom: 10px;
-}
-
-.world-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.world-info {
-  background-color: var(--bg-secondary);
-  padding: 15px;
-  border-radius: 4px;
-  margin-bottom: 20px;
+  position: relative;
   flex: 1;
-  
-  p {
-    margin: 5px 0;
-    font-size: 14px;
-    color: var(--text-secondary);
-  }
-}
-
-.action-buttons {
-  margin-left: 15px;
-}
-
-.editor-toolbar {
-  background-color: var(--bg-secondary);
-  padding: 10px 15px;
-  border-radius: 4px 4px 0 0;
-  border: 1px solid var(--border-color);
-  border-bottom: none;
-}
-
-.toolbar-tip {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  font-style: italic;
-}
-
-.save-button {
-  padding: 8px 15px;
-  background-color: var(--button-primary-bg);
-  color: var(--button-primary-text);
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.3s;
-  
-  &:hover {
-    background-color: var(--accent-primary-dark);
-  }
-}
-
-.loading-state,
-.error-state {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
   height: 100%;
-  width: 100%;
-}
+  overflow: hidden;
+  background-color: var(--bg-primary);
 
-.loading-text {
-  font-size: 18px;
-  color: var(--text-secondary);
-}
-
-.error-text {
-  font-size: 18px;
-  color: var(--error);
-  margin-bottom: 20px;
-}
-
-.back-to-home-button {
-  padding: 8px 16px;
-  background-color: var(--button-primary-bg);
-  color: var(--button-primary-text);
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.3s;
-  
-  &:hover {
-    background-color: var(--accent-primary-dark);
+  // 编辑器容器
+  .editor-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
   }
+
+  // 编辑器内容容器
+  .editor-content-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    
+    .editor-header {
+      padding: 1rem;
+      border-bottom: 1px solid var(--border-color);
+      background-color: var(--bg-secondary);
+      
+      h2 {
+        margin: 0;
+        font-size: 1.4rem;
+        color: var(--text-primary);
+      }
+    }
+    
+    .editor-content-wrapper {
+      flex: 1;
+      height: calc(100% - 60px); // 减去header高度
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+  }
+
+  // 加载状态
+  .editor-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 3px solid rgba(var(--accent-primary-rgb), 0.2);
+      border-top-color: var(--accent-primary);
+      animation: spin 1s infinite linear;
+    }
+    
+    p {
+      margin-top: 1rem;
+      color: var(--text-secondary);
+    }
+  }
+  
+  // 错误提示
+  .editor-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 2rem;
+    color: var(--error-color, #f44336);
+    text-align: center;
+  }
+  
+  // 其他内容容器
+  .other-content-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-secondary);
+    text-align: center;
+  }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style> 
