@@ -1,0 +1,44 @@
+/* ProseMirror默认样式覆盖 */
+
+/* 移除所有ProseMirror相关的边框和轮廓 */
+.ProseMirror {
+  outline: none !important;
+  white-space: pre-wrap !important;
+  
+  &:focus, &:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  
+  * {
+    outline: none !important;
+  }
+  
+  .ProseMirror-selectednode {
+    outline: none !important;
+    border: none !important;
+  }
+}
+
+/* 自定义选择样式 */
+::selection {
+  background-color: var(--selection-bg, rgba(0, 122, 255, 0.2)) !important;
+  color: inherit !important;
+}
+
+/* 隐藏空白处理的边框 */
+.ProseMirror-gapcursor {
+  display: none !important;
+}
+
+/* 修复光标边框问题 */
+.ProseMirror-focused {
+  outline: none !important;
+  border-color: var(--accent-primary) !important;
+}
+
+/* 移除编辑器内拖拽元素的边框 */
+.ProseMirror-dragoverlay {
+  border: none !important;
+  outline: none !important;
+} 

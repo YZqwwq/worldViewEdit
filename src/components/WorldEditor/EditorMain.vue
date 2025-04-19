@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { defineProps, defineEmits, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import type { WorldData } from '../../electron';
+import ProseMirrorEditor from './ProseMirrorEditor.vue';
 
 // 定义接收的属性
 const props = defineProps<{
@@ -20,6 +21,9 @@ const emit = defineEmits<{
 
 // 编辑器内容
 const editorContent = ref('');
+
+// 编辑器实例引用
+const editorRef = ref(null);
 
 // 组件刷新机制
 const componentKey = ref(0);
@@ -58,74 +62,13 @@ onMounted(() => {
     else if (props.worldData.content.markdown) {
       editorContent.value = props.worldData.content.markdown;
     } 
-    // 都没有则使用默认模板
+    // 不再提供默认模板，使用空字符串
     else {
-      // 提供默认模板
-      editorContent.value = 
-`# ${props.worldData.name || '世界观名称'}
-
-## 背景设定
-
-在这里描述世界的基本背景和设定...
-
-## 主要时间线
-
-### 远古时代
-
-远古时代的重要事件...
-
-### 中世纪
-
-中世纪的重要事件...
-
-## 世界规则
-
-### 魔法系统
-
-这个世界的魔法是如何运作的...
-
-### 科技水平
-
-这个世界的科技发展到了什么程度...
-
-## 重要地点
-
-## 重要人物
-`;
+      editorContent.value = '';
     }
   } else {
-    // 提供默认模板
-    editorContent.value = 
-`# ${props.worldData.name || '世界观名称'}
-
-## 背景设定
-
-在这里描述世界的基本背景和设定...
-
-## 主要时间线
-
-### 远古时代
-
-远古时代的重要事件...
-
-### 中世纪
-
-中世纪的重要事件...
-
-## 世界规则
-
-### 魔法系统
-
-这个世界的魔法是如何运作的...
-
-### 科技水平
-
-这个世界的科技发展到了什么程度...
-
-## 重要地点
-
-## 重要人物
-`;
+    // 不再提供默认模板，使用空字符串
+    editorContent.value = '';
   }
   
   // 初始提取标题
@@ -142,31 +85,8 @@ onBeforeUnmount(() => {
 
 // 滚动到指定标题
 function scrollToTitle(titleName: string) {
-  // 使用简单的正则表达式匹配标题行
-  const titleRegex = new RegExp(`^(#{1,5})\\s+${titleName}$`, 'm');
-  const match = editorContent.value.match(titleRegex);
-  
-  if (match && match.index !== undefined) {
-    // 找到标题在文本中的位置
-    const titlePosition = match.index;
-    
-    // 计算行号
-    const contentBeforeTitle = editorContent.value.substring(0, titlePosition);
-    const linesBefore = contentBeforeTitle.split('\n').length - 1;
-    
-    // 获取编辑器元素
-    const editorElement = document.querySelector('.content-editor') as HTMLTextAreaElement;
-    if (editorElement) {
-      // 设置光标位置
-      editorElement.focus();
-      
-      // 计算每行的平均高度
-      const lineHeight = editorElement.scrollHeight / editorElement.value.split('\n').length;
-      
-      // 滚动到该行
-      editorElement.scrollTop = lineHeight * linesBefore;
-    }
-  }
+  // 暂时不实现，后续需要通过ProseMirror实现
+  console.log('请求滚动到标题:', titleName);
 }
 
 // 从内容中提取标题
@@ -178,10 +98,11 @@ function extractTitlesFromContent() {
   
   lines.forEach(line => {
     // 匹配Markdown标题格式: # 标题、## 标题、### 标题等
-    const match = line.match(/^(#{1,5})\s+(.+)$/);
+    // 修改正则表达式，使其也支持没有空格的标题格式，如 #标题、##标题
+    const match = line.match(/^(#{1,5})(\s+)?(.+)$/);
     if (match) {
       const level = match[1].length; // #的数量表示标题等级
-      const title = match[2].trim();
+      const title = match[3].trim();
       titles.push({
         title,
         level,
@@ -266,15 +187,17 @@ function goBack() {
           <div class="editor-toolbar">
             <div class="toolbar-tip">
               使用 # 创建一级标题，## 创建二级标题，以此类推（最多支持五级标题 #####）
+              <br>注：标题符号与文字之间的空格可选，如 ##标题 或 ## 标题 均有效
             </div>
           </div>
           
-          <textarea 
-            class="content-editor" 
+          <!-- 使用ProseMirror编辑器替代textarea -->
+          <ProseMirrorEditor 
+            ref="editorRef"
             v-model="editorContent"
-            @input="handleContentChange"
+            @change="handleContentChange"
             placeholder="在此输入内容，使用Markdown语法创建标题..."
-          ></textarea>
+          />
         </div>
       </div>
     </div>
@@ -344,25 +267,6 @@ function goBack() {
   font-size: 12px;
   color: var(--text-tertiary);
   font-style: italic;
-}
-
-.content-editor {
-  width: 100%;
-  min-height: 500px;
-  padding: 15px;
-  border: 1px solid var(--border-color);
-  border-radius: 0 0 4px 4px;
-  font-size: 16px;
-  line-height: 1.6;
-  resize: vertical;
-  font-family: 'Courier New', Courier, monospace;
-  background-color: var(--editor-bg);
-  color: var(--editor-text);
-  
-  &:focus {
-    border-color: var(--accent-primary);
-    outline: none;
-  }
 }
 
 .save-button {
