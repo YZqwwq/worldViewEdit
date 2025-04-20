@@ -477,9 +477,9 @@ export function useMapRenderer(
         } else if (longitude === 180 || longitude === -180) {
           labelText = "国际日期变更线";
         } else if (longitude > 0) {
-          labelText = `东经${longitude}°`;
+          labelText = `${longitude}°E`;
         } else if (longitude < 0) {
-          labelText = `西经${Math.abs(longitude)}°`;
+          labelText = `${Math.abs(longitude)}°E`;
         }
         
         // 绘制标签背景提高可读性
@@ -532,9 +532,9 @@ export function useMapRenderer(
         } else if (actualLatitude === -90) {
           labelText = '南极';
         } else if (actualLatitude > 0) {
-          labelText = `北纬${actualLatitude}°`;
+          labelText = `${actualLatitude}°N`;
         } else {
-          labelText = `南纬${Math.abs(actualLatitude)}°`;
+          labelText = `${Math.abs(actualLatitude)}°S`;
         }
         
         // 绘制标签背景提高可读性

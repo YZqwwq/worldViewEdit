@@ -116,13 +116,13 @@ export function useMapData(props: { worldData: WorldData }, emit: any) {
   // 格式化经度显示（添加东经/西经）
   function formatLongitude(longitude: number): string {
     if (longitude === 0) return '0°';
-    return longitude > 0 ? `东经${longitude}°` : `西经${Math.abs(longitude)}°`;
+    return longitude > 0 ? `${longitude}°E` : `${Math.abs(longitude)}°W`;
   }
   
   // 格式化纬度显示（添加北纬/南纬）
   function formatLatitude(latitude: number): string {
     if (latitude === 0) return '0°';
-    return latitude > 0 ? `北纬${latitude}°` : `南纬${Math.abs(latitude)}°`;
+    return latitude > 0 ? `${latitude}°N` : `${Math.abs(latitude)}°S`;
   }
   
   return {

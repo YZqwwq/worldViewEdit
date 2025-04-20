@@ -185,8 +185,8 @@ watch(() => props.worldData, () => {
       </div>
       
       <div class="coordinate-display" v-if="showCoordinates">
-        <div class="coordinate-label">{{ mouseX > 0 ? `东经${mouseX}°` : `西经${Math.abs(mouseX)}°` }}</div>
-        <div class="coordinate-label">{{ mouseY > 0 ? `北纬${mouseY}°` : `南纬${Math.abs(mouseY)}°` }}</div>
+        <div class="coordinate-label">{{ mouseX > 0 ? `${mouseX}°W` : `${Math.abs(mouseX)}°E` }}</div>
+        <div class="coordinate-label">{{ mouseY > 0 ? `${mouseY}°N` : `${Math.abs(mouseY)}°S` }}</div>
         <div class="coordinate-label">缩放: {{ Math.round(scale * 100) }}%</div>
         <button class="coord-toggle" @click="toggleCoordinates" title="隐藏坐标">
           <i class="fas fa-eye-slash"></i>

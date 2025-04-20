@@ -68,8 +68,8 @@ export function useMapInteractions(
   
   // 格式化坐标为位置名称
   function formatCoordinates(longitude: number, latitude: number): string {
-    const longStr = longitude > 0 ? `东经${longitude}°` : `西经${Math.abs(longitude)}°`;
-    const latStr = latitude > 0 ? `北纬${latitude}°` : `南纬${Math.abs(latitude)}°`;
+    const longStr = longitude > 0 ? `${longitude}°E` : `${Math.abs(longitude)}°W`;
+    const latStr = latitude > 0 ? `${latitude}°N` : `${Math.abs(latitude)}°S`;
     return `${longStr}, ${latStr}`;
   }
   
@@ -234,18 +234,9 @@ export function useMapInteractions(
       const newOffsetX = offsetX.value + dx;
       const newOffsetY = offsetY.value + dy;
       
-      // 计算X轴边界限制
-      // 为了显示完整地图，限制X轴拖动范围
-      const minOffsetX = Math.min(0, rect.width - (mapWidthInPixels * scale.value));
-      const maxOffsetX = 0;
-      
-      // Y轴边界限制（保持不变）
-      const minOffsetY = Math.min(0, rect.height - (mapHeightInPixels * scale.value));
-      const maxOffsetY = 0;
-      
-      // 应用X轴和Y轴的边界限制
-      offsetX.value = Math.min(maxOffsetX, Math.max(minOffsetX, newOffsetX));
-      offsetY.value = Math.min(maxOffsetY, Math.max(minOffsetY, newOffsetY));
+      // 移除所有边界限制，允许在灰色区域自由拖动
+      offsetX.value = newOffsetX;
+      offsetY.value = newOffsetY;
       
       // 更新拖动起始点
       dragStartX.value = e.clientX;
