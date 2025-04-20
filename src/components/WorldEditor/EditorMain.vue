@@ -2,6 +2,7 @@
 import { defineProps, defineEmits, ref, watch, onMounted, onBeforeUnmount, computed } from 'vue';
 import type { WorldData } from '../../electron';
 import ProseMirrorEditor from './ProseMirrorEditor.vue';
+import WorldMapView from '../WorldMap/WorldMapView.vue';
 
 // 定义接收的属性
 const props = defineProps<{
@@ -52,11 +53,17 @@ onMounted(() => {
   // 添加主题变化监听
   document.addEventListener('theme-changed', handleThemeChange as EventListener);
   
+  // 简化调试输出
+  console.log('EditorMain组件挂载，worldData123:', JSON.stringify(props.worldData));
+  console.log('EditorMain组件挂载，worldData:', props.worldData.content.main_setting_of_the_worldview.content.text);
+  
   // 初始化编辑器内容
   if (!props.isLoading && props.worldData.content) {
     // 优先从main_setting_of_the_worldview中获取内容
     if (props.worldData.content.main_setting_of_the_worldview?.content?.text) {
+      // 直接设置内容，移除编码处理相关代码
       editorContent.value = props.worldData.content.main_setting_of_the_worldview.content.text;
+      console.log('已设置编辑器内容:', editorContent.value);
     } 
     // 兼容旧版数据，尝试加载markdown字段
     else if (props.worldData.content.markdown) {
@@ -69,6 +76,7 @@ onMounted(() => {
   } else {
     // 不再提供默认模板，使用空字符串
     editorContent.value = '';
+    console.warn('worldData为空或正在加载中');
   }
   
   // 初始提取标题
@@ -124,16 +132,49 @@ function saveContent() {
   // 提取新的标题
   extractTitlesFromContent();
   
-  // 更新内容
-  handleContentChange();
+  // 创建当前时间戳
+  const now = new Date().toISOString();
   
-  console.log('手动保存内容');
+  // 准备要更新的完整世界观数据
+  const updatedWorldData = {
+    ...props.worldData,
+    updatedAt: now,
+    content: {
+      ...props.worldData.content,
+      main_setting_of_the_worldview: {
+        updatedAt: now,
+        content: {
+          text: editorContent.value
+        }
+      }
+    }
+  };
+  
+  // 发送更新整个世界观数据的事件
+  emit('updateWorldData', updatedWorldData);
+  
+  console.log('保存的世界观数据:', updatedWorldData);
 }
 
 // 返回主页面
 function goBack() {
   emit('back');
 }
+
+// 是否显示世界观文本编辑器
+const isWorldviewTextContent = computed(() => {
+  return props.activeItem === '世界观' || props.activeItem.startsWith('世界观:');
+});
+
+// 是否显示地图编辑器
+const isMapContent = computed(() => {
+  return props.activeItem === '地图';
+});
+
+// 是否显示人物编辑器
+const isCharacterContent = computed(() => {
+  return props.activeItem === '人物';
+});
 
 // 定义是否是世界观内容
 const isWorldviewContent = computed(() => {
@@ -156,6 +197,11 @@ function getHeaderTitle() {
     return '人物管理';
   }
   return props.activeItem;
+}
+
+// 处理世界数据更新
+function handleWorldDataUpdate(updatedWorldData: WorldData) {
+  emit('updateWorldData', updatedWorldData);
 }
 </script>
 
@@ -181,12 +227,28 @@ function getHeaderTitle() {
         </div>
         
         <div class="editor-content-wrapper">
+          <!-- 世界观文本编辑器 -->
           <ProseMirrorEditor
+            v-if="isWorldviewTextContent"
             ref="editorRef"
             v-model="editorContent"
             placeholder="开始创作你的世界观..."
             @change="handleContentChange"
+            @save="saveContent"
           />
+          
+          <!-- 地图编辑器 -->
+          <WorldMapView
+            v-else-if="isMapContent"
+            :worldData="worldData"
+            @updateWorldData="handleWorldDataUpdate"
+            @save="saveContent"
+          />
+          
+          <!-- 人物编辑器 (待实现) -->
+          <div v-else-if="isCharacterContent" class="character-editor-placeholder">
+            <p>人物编辑器开发中...</p>
+          </div>
         </div>
       </div>
       
@@ -281,7 +343,7 @@ function getHeaderTitle() {
   }
   
   // 其他内容容器
-  .other-content-container {
+  .other-content-container, .character-editor-placeholder {
     display: flex;
     align-items: center;
     justify-content: center;

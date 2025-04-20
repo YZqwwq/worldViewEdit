@@ -17,19 +17,31 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void; // v-model双向绑定支持
   (e: 'change'): void; // 内容变化事件
+  (e: 'save'): void; // 保存事件
 }>();
 
 // 创建DOM引用
 const editorRef = ref<HTMLDivElement | null>(null);
 let editorView: EditorView | null = null;
 
+// 快捷键提示控制
+const showShortcutTip = ref(false);
+const shortcutTipTimeout = ref<number | null>(null);
+const isKeyDown = ref(false);
+
+// 保存提示控制
+const showSaveTip = ref(false);
+const saveTipTimeout = ref<number | null>(null);
+
 // 初始化编辑器
 onMounted(() => {
   if (!editorRef.value) return;
 
+  console.log('ProseMirrorEditor 组件挂载，传入的内容:', props.modelValue);
+  
   // 创建编辑器状态
   const state = createDefaultState(props.modelValue || '');
-
+  
   // 创建编辑器视图
   editorView = createEditorView({
     container: editorRef.value,
@@ -45,12 +57,19 @@ onMounted(() => {
     editable: true,
     // 添加键盘事件监听
     handleKeyDown: (view: EditorView, event: KeyboardEvent) => {
-      // 在这里处理特殊的键盘事件
-      // 如果已经在state.ts中处理了则不需要这里重复处理
+      // 检测到Ctrl键按下时显示快捷键提示
+      if (event.ctrlKey && !event.altKey && !event.shiftKey) {
+        if (!isKeyDown.value) {
+          showKeyboardShortcutTip();
+          isKeyDown.value = true;
+        }
+      }
       return false; // 返回false允许继续处理事件
     }
   });
 
+  console.log('编辑器初始化完成');
+  
   // 添加placeholder效果
   if (props.placeholder && props.modelValue === '') {
     addPlaceholder();
@@ -59,11 +78,65 @@ onMounted(() => {
   // 为编辑器容器添加键盘事件监听
   if (editorRef.value) {
     editorRef.value.addEventListener('keydown', handleKeyDown);
-    
-    // 添加点击事件监听，处理空白区域点击
     editorRef.value.addEventListener('click', handleEditorClick);
+    
+    // 监听按键释放事件
+    window.addEventListener('keyup', handleKeyUp);
   }
+  
+  // 监听保存事件
+  document.addEventListener('prosemirror-save-requested', handleSaveRequest);
 });
+
+// 处理保存请求
+function handleSaveRequest() {
+  console.log('接收到保存请求');
+  
+  // 触发保存事件
+  emit('save');
+  
+  // 显示保存提示
+  showSaveTip.value = true;
+  
+  // 清除现有的超时
+  if (saveTipTimeout.value !== null) {
+    clearTimeout(saveTipTimeout.value);
+  }
+  
+  // 设置2秒后隐藏提示
+  saveTipTimeout.value = window.setTimeout(() => {
+    showSaveTip.value = false;
+    saveTipTimeout.value = null;
+  }, 2000);
+}
+
+// 监听按键释放
+function handleKeyUp(event: KeyboardEvent) {
+  if (event.key === 'Control') {
+    isKeyDown.value = false;
+    
+    // 键释放后1秒隐藏提示
+    if (shortcutTipTimeout.value !== null) {
+      clearTimeout(shortcutTipTimeout.value);
+    }
+    
+    shortcutTipTimeout.value = window.setTimeout(() => {
+      showShortcutTip.value = false;
+      shortcutTipTimeout.value = null;
+    }, 500);
+  }
+}
+
+// 显示快捷键提示
+function showKeyboardShortcutTip() {
+  showShortcutTip.value = true;
+  
+  // 清除现有的超时
+  if (shortcutTipTimeout.value !== null) {
+    clearTimeout(shortcutTipTimeout.value);
+    shortcutTipTimeout.value = null;
+  }
+}
 
 // 处理编辑器点击事件
 function handleEditorClick(event: MouseEvent) {
@@ -138,6 +211,8 @@ watch(() => props.modelValue, (newValue, oldValue) => {
 function updateContent(markdown: string) {
   if (!editorView) return;
   
+  console.log('更新编辑器内容');
+  
   const state = createDefaultState(markdown);
   editorView.updateState(state);
 }
@@ -163,6 +238,21 @@ onBeforeUnmount(() => {
     editorRef.value.removeEventListener('keydown', handleKeyDown);
     editorRef.value.removeEventListener('click', handleEditorClick);
   }
+  
+  // 移除全局事件监听
+  window.removeEventListener('keyup', handleKeyUp);
+  document.removeEventListener('prosemirror-save-requested', handleSaveRequest);
+  
+  // 清除快捷键提示定时器
+  if (shortcutTipTimeout.value !== null) {
+    clearTimeout(shortcutTipTimeout.value);
+  }
+  
+  // 清除保存提示定时器
+  if (saveTipTimeout.value !== null) {
+    clearTimeout(saveTipTimeout.value);
+  }
+  
   destroyView(editorView);
   editorView = null;
 });
@@ -182,6 +272,25 @@ defineExpose({
 <template>
   <div class="prosemirror-editor-container">
     <div ref="editorRef" class="prosemirror-editor"></div>
+    
+    <!-- 快捷键提示 -->
+    <transition name="fade">
+      <div class="shortcut-tip" v-if="showShortcutTip">
+        <div class="tip-header">快捷键:</div>
+        <div class="tip-content">
+          <div><kbd>Ctrl+数字键</kbd>设置标题级别</div>
+          <div><kbd>Ctrl+S</kbd>保存内容</div>
+        </div>
+      </div>
+    </transition>
+    
+    <!-- 保存提示 -->
+    <transition name="fade">
+      <div class="save-tip" v-if="showSaveTip">
+        <div class="save-icon">✓</div>
+        <div class="save-message">已保存</div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -191,6 +300,7 @@ defineExpose({
   height: 100%;
   display: flex;
   flex-direction: column;
+  position: relative;
   
   .prosemirror-editor {
     width: 100%;
@@ -272,10 +382,14 @@ defineExpose({
     
     h1 { 
       font-size: 1.8em; 
+      /* 移除边框和下划线 */
+      /* border-bottom: 1px solid var(--border-color); */
       padding-bottom: 0.3em;
     }
     h2 { 
       font-size: 1.5em; 
+      /* 移除边框和下划线 */
+      /* border-bottom: 1px solid var(--border-color); */
       padding-bottom: 0.2em;
     }
     h3 { font-size: 1.3em; }
@@ -356,6 +470,86 @@ defineExpose({
     ul ul, ol ol, ul ol, ol ul {
       margin: 0.2em 0;
     }
+  }
+  
+  // 快捷键提示样式
+  .shortcut-tip {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    background-color: var(--bg-secondary, rgba(245, 245, 245, 0.95));
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 10;
+    font-size: 0.9rem;
+    max-width: 300px;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    
+    .tip-header {
+      font-weight: bold;
+      margin-bottom: 5px;
+      color: var(--text-primary);
+    }
+    
+    .tip-content {
+      color: var(--text-secondary);
+      
+      div {
+        margin: 5px 0;
+      }
+      
+      kbd {
+        display: inline-block;
+        padding: 2px 4px;
+        font-size: 0.8rem;
+        font-family: monospace;
+        color: var(--text-primary);
+        background-color: var(--bg-tertiary, #f7f7f7);
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
+        margin: 0 2px;
+      }
+    }
+  }
+  
+  // 保存提示样式
+  .save-tip {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background-color: rgba(46, 204, 113, 0.9);
+    color: white;
+    border-radius: 6px;
+    padding: 10px 15px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 10;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    
+    .save-icon {
+      font-size: 1.2rem;
+      margin-right: 8px;
+    }
+    
+    .save-message {
+      font-weight: bold;
+    }
+  }
+  
+  // 淡入淡出动画
+  .fade-enter-active,
+  .fade-leave-active {
+    transition: opacity 0.3s, transform 0.3s;
+  }
+  
+  .fade-enter-from,
+  .fade-leave-to {
+    opacity: 0;
+    transform: translateY(10px);
   }
 }
 

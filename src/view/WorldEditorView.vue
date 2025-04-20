@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import type { WorldData } from '../electron';
+import { useWorldStore } from '../stores/worldStore';
 import EditorSidebar from '../components/WorldEditor/EditorSidebar.vue';
 import EditorMain from '../components/WorldEditor/EditorMain.vue';
 
@@ -9,22 +9,9 @@ import EditorMain from '../components/WorldEditor/EditorMain.vue';
 const activeItem = ref('世界观');
 // 当前编辑的世界观ID
 const worldId = ref('');
-// 当前编辑的世界观数据
-const worldData = ref<WorldData>({
-  id: '',
-  name: '',
-  createdAt: '',
-  updatedAt: '',
-  description: '',
-  content: {}
-});
 
-// 提取的标题列表
-const extractedTitles = ref<Array<{title: string, level: number, position: number}>>([]);
-
-// 加载状态
-const isLoading = ref(true);
-const errorMsg = ref('');
+// 使用Pinia store
+const worldStore = useWorldStore();
 
 // 获取路由器实例和当前路由
 const router = useRouter();
@@ -36,49 +23,14 @@ onMounted(() => {
   const id = route.query.id as string;
   if (id) {
     worldId.value = id;
-    // 加载世界观数据
-    loadWorldData(id);
+    // 使用store加载世界观数据
+    worldStore.loadWorldData(id);
   } else {
     // 没有ID参数，显示错误
-    isLoading.value = false;
-    errorMsg.value = '未提供世界观ID';
+    worldStore.isLoading = false;
+    worldStore.errorMsg = '未提供世界观ID';
   }
 });
-
-// 加载世界观数据
-async function loadWorldData(id: string) {
-  isLoading.value = true;
-  errorMsg.value = '';
-  
-  try {
-    if (window.electronAPI) {
-      // 使用新的 API
-      const data = await window.electronAPI.data.readFile(`world_${id}.json`);
-      if (data) {
-        worldData.value = data;
-      } else {
-        errorMsg.value = `找不到ID为 ${id} 的世界观数据`;
-      }
-    } else {
-      console.warn('electronAPI 不可用，可能在浏览器环境中运行');
-      // 模拟数据用于浏览器开发环境
-      const now = new Date().toISOString();
-      worldData.value = {
-        id: id,
-        name: `世界观_${id.substring(0, 4)}`,
-        createdAt: now,
-        updatedAt: now,
-        description: '这是一个模拟的世界观数据',
-        content: {}
-      };
-    }
-  } catch (error) {
-    console.error('加载世界观数据失败:', error);
-    errorMsg.value = '加载世界观数据失败: ' + (error instanceof Error ? error.message : String(error));
-  } finally {
-    isLoading.value = false;
-  }
-}
 
 // 当选择标题时的处理函数
 function handleSelectTitle(title: string) {
@@ -88,118 +40,17 @@ function handleSelectTitle(title: string) {
 
 // 处理从编辑器中提取的标题
 function handleExtractTitles(titles: Array<{title: string, level: number, position: number}>) {
-  console.log('提取到标题数量:', titles.length);
-  extractedTitles.value = titles;
+  worldStore.updateExtractedTitles(titles);
 }
 
 // 处理内容更新
 function handleUpdateContent(content: any) {
-  console.log('更新内容，对象类型:', typeof content);
-  
-  try {
-    // 更新世界观数据
-    if (!worldData.value.content) {
-      worldData.value.content = {};
-    }
-    
-    // 确保content是对象类型
-    if (typeof content === 'string') {
-      try {
-        // 尝试将字符串解析为JSON对象
-        content = JSON.parse(content);
-      } catch (parseError) {
-        console.error('解析内容字符串失败:', parseError);
-        // 如果解析失败，将内容保存到main_setting_of_the_worldview中
-        if (!worldData.value.content.main_setting_of_the_worldview) {
-          worldData.value.content.main_setting_of_the_worldview = {
-            updatedAt: new Date().toISOString(),
-            content: { text: content }
-          };
-        } else {
-          worldData.value.content.main_setting_of_the_worldview.updatedAt = new Date().toISOString();
-          worldData.value.content.main_setting_of_the_worldview.content = { text: content };
-        }
-        worldData.value.updatedAt = new Date().toISOString();
-        saveWorldData();
-        return;
-      }
-    }
-    
-    // 将内容合并到worldData.content中
-    worldData.value.content = {
-      ...content,
-      // 确保main_setting_of_the_worldview存在
-      main_setting_of_the_worldview: {
-        updatedAt: new Date().toISOString(),
-        content: content.main_setting_of_the_worldview?.content || {}
-      },
-      // 确保worldmaps存在
-      worldmaps: content.worldmaps || {},
-      // 确保characters存在
-      characters: content.characters || {}
-    };
-    
-    console.log('结构化内容已更新:', worldData.value.content);
-  } catch (error) {
-    console.error('处理内容更新失败:', error);
-    
-    // 如果发生其他错误，尝试作为纯文本处理
-    if (typeof content === 'string') {
-      if (!worldData.value.content) {
-        worldData.value.content = { 
-          main_setting_of_the_worldview: {
-            updatedAt: new Date().toISOString(),
-            content: { text: content }
-          }
-        };
-      } else {
-        if (!worldData.value.content.main_setting_of_the_worldview) {
-          worldData.value.content.main_setting_of_the_worldview = {
-            updatedAt: new Date().toISOString(),
-            content: { text: content }
-          };
-        } else {
-          worldData.value.content.main_setting_of_the_worldview.content = { text: content };
-          worldData.value.content.main_setting_of_the_worldview.updatedAt = new Date().toISOString();
-        }
-      }
-    }
-  }
-  
-  // 更新时间戳
-  worldData.value.updatedAt = new Date().toISOString();
-  
-  // 保存更新后的数据
-  saveWorldData();
+  worldStore.updateContent(content);
 }
 
 // 处理完整世界观数据更新
-function handleUpdateWorldData(updatedData: WorldData) {
-  console.log('接收到完整世界观数据更新');
-  
-  // 直接使用更新的世界观数据
-  worldData.value = updatedData;
-  
-  // 保存更新后的数据
-  saveWorldData();
-}
-
-// 保存世界观数据
-async function saveWorldData() {
-  try {
-    if (window.electronAPI && worldId.value) {
-      // 将Vue响应式对象转换为普通JavaScript对象
-      const plainData = JSON.parse(JSON.stringify(worldData.value));
-      
-      // 使用Electron API保存数据
-      await window.electronAPI.data.saveFile(`world_${worldId.value}.json`, plainData);
-      console.log('世界观数据保存成功');
-    } else {
-      console.warn('无法保存数据，electronAPI不可用或worldId为空');
-    }
-  } catch (error) {
-    console.error('保存世界观数据失败:', error);
-  }
+function handleUpdateWorldData(updatedData: any) {
+  worldStore.updateWorldData(updatedData);
 }
 
 // 返回主页面
@@ -213,22 +64,29 @@ function goBack() {
     <!-- 使用侧边栏组件 -->
     <EditorSidebar 
       v-model:activeItem="activeItem"
-      :worldTitles="extractedTitles"
+      :worldTitles="worldStore.extractedTitles"
       @back="goBack"
       @selectTitle="handleSelectTitle"
     />
     
-    <!-- 使用主编辑区域组件 -->
+    <!-- 使用主编辑区域组件，使用store的isDataLoaded getter来确定何时渲染 -->
     <EditorMain
-      :isLoading="isLoading"
-      :errorMsg="errorMsg"
-      :worldData="worldData"
+      v-if="worldStore.isDataLoaded"
+      :isLoading="worldStore.isLoading"
+      :errorMsg="worldStore.errorMsg"
+      :worldData="worldStore.worldData"
       :activeItem="activeItem"
       @back="goBack"
       @updateContent="handleUpdateContent"
       @updateWorldData="handleUpdateWorldData"
       @extractTitles="handleExtractTitles"
     />
+    
+    <!-- 数据加载中的占位显示 -->
+    <div v-else class="loading-container">
+      <div class="loading-spinner"></div>
+      <p>正在加载世界观数据...</p>
+    </div>
   </div>
 </template>
 
@@ -242,5 +100,33 @@ function goBack() {
   overflow: hidden;
   position: relative;
   background-color: #f5f5f5;
+}
+
+/* 添加加载中样式 */
+.loading-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 3px solid rgba(0, 100, 200, 0.2);
+    border-top-color: #0066cc;
+    animation: spin 1s infinite linear;
+  }
+  
+  p {
+    margin-top: 1rem;
+    color: #666;
+  }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style> 

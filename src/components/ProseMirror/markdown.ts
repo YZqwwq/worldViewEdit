@@ -63,6 +63,27 @@ export const markdownSerializer = new MarkdownSerializer(
       close: '~~',
       mixable: true,
       expelEnclosingWhitespace: true
+    },
+    // 加粗
+    strong: {
+      open: '**',
+      close: '**',
+      mixable: true,
+      expelEnclosingWhitespace: true
+    },
+    // 斜体
+    em: {
+      open: '*',
+      close: '*',
+      mixable: true,
+      expelEnclosingWhitespace: true
+    },
+    // 行内代码
+    code: {
+      open: '`',
+      close: '`',
+      mixable: false,
+      expelEnclosingWhitespace: true
     }
   }
 );

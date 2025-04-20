@@ -12,6 +12,16 @@ import { history } from 'prosemirror-history';
 import { dropCursor } from 'prosemirror-dropcursor';
 import { gapCursor } from 'prosemirror-gapcursor';
 import { inputRules, InputRule } from 'prosemirror-inputrules';
+import { setBlockType } from 'prosemirror-commands';
+
+// 创建自定义事件，用于通知保存操作
+const SAVE_EVENT_NAME = 'prosemirror-save-requested';
+
+// 派发保存事件
+export function dispatchSaveEvent() {
+  const event = new CustomEvent(SAVE_EVENT_NAME);
+  document.dispatchEvent(event);
+}
 
 // 基本的Markdown输入规则
 // 当用户输入特定的字符序列时会自动转换为相应的节点
@@ -64,10 +74,40 @@ function createBackspaceKeyMap(schema: any) {
   });
 }
 
+// 创建快捷键映射
+function createHeadingKeyMap(schema: any) {
+  const headingKeyMap: {[key: string]: any} = {};
+  
+  // 添加Ctrl+1到Ctrl+6的快捷键，用于创建各级标题
+  for (let i = 1; i <= 6; i++) {
+    headingKeyMap[`Ctrl-${i}`] = setBlockType(schema.nodes.heading, { level: i });
+  }
+  
+  // 添加Ctrl+0的快捷键，用于转换回普通段落
+  headingKeyMap['Ctrl-0'] = setBlockType(schema.nodes.paragraph);
+  
+  return keymap(headingKeyMap);
+}
+
+// 创建保存快捷键映射
+function createSaveKeyMap() {
+  return keymap({
+    'Ctrl-s': (state: EditorState) => {
+      // 阻止浏览器默认保存行为
+      setTimeout(() => {
+        dispatchSaveEvent();
+      }, 0);
+      return true;
+    }
+  });
+}
+
 // 创建基本插件数组
 export function createPlugins(extraPlugins: Plugin[] = []) {
   return [
     buildMdInputRules(editorSchema),  // 添加输入规则（如# 空格自动转为标题）
+    createHeadingKeyMap(editorSchema), // 添加标题快捷键
+    createSaveKeyMap(),                // 添加保存快捷键
     createBackspaceKeyMap(editorSchema), // 添加自定义退格键处理
     keymap(baseKeymap),               // 基本按键映射
     dropCursor(),                     // 拖放时显示光标位置
