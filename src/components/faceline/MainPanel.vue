@@ -252,7 +252,7 @@ async function handleConfirmCreate() {
 // 打开世界观
 function openWorld(worldInfo: WorldInfo) {
   router.push({
-    path: '/editor',
+    path: '/tool',
     query: { id: worldInfo.id }
   });
 }

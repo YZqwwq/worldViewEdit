@@ -1,25 +1,29 @@
 <script setup lang="ts">
 import { defineProps, defineEmits, ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
+
+// 获取路由实例
+const router = useRouter();
+const route = useRoute();
 
 // 定义接收的属性
 const props = defineProps<{
-  activeItem: string,
   worldTitles?: Array<{title: string, level: number, position: number}>
 }>();
 
 // 定义事件
 const emit = defineEmits<{
-  (e: 'update:activeItem', value: string): void
-  (e: 'back'): void
   (e: 'selectTitle', title: string): void
+  (e: 'back'): void
 }>();
 
 // 展开状态
 const isWorldExpanded = ref(false);
 
-// 自动展开侧边栏
-watch(() => props.activeItem, (newValue) => {
-
+// 监听路由变化
+watch(() => route.path, (newPath) => {
+  // 如果路径包含世界观，则展开世界观菜单
+  isWorldExpanded.value = newPath.includes('/editor/world');
 });
 
 // 监听主题变化事件
@@ -30,7 +34,6 @@ function refreshComponent() {
 
 function handleThemeChange(event: CustomEvent) {
   console.log('侧边栏组件检测到主题变化:', event.detail.theme);
-  // 在下一个微任务中执行DOM更新，确保CSS变量已应用
   setTimeout(() => {
     refreshComponent();
   }, 0);
@@ -39,38 +42,35 @@ function handleThemeChange(event: CustomEvent) {
 // 监听事件
 onMounted(() => {
   document.addEventListener('theme-changed', handleThemeChange as EventListener);
+  // 初始化展开状态
+  isWorldExpanded.value = route.path.includes('/editor/world');
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener('theme-changed', handleThemeChange as EventListener);
 });
 
-
 // 处理世界观点击
 function handleWorldClick() {
-  // 如果当前不是世界观项，则先设置为世界观
-  if (props.activeItem !== '世界观') {
-    setActiveItem('世界观');
+  // 如果当前不在世界观路由，则导航到世界观
+  if (!route.path.includes('/editor/world')) {
+    router.push('/editor/world');
   }
   
-  // 切换展开/折叠状态（无论是否为活动项）
+  // 切换展开/折叠状态
   isWorldExpanded.value = !isWorldExpanded.value;
-}
-
-// 切换选中项
-function setActiveItem(item: string) {
-  emit('update:activeItem', item);
 }
 
 // 选择标题
 function selectTitle(title: string) {
   emit('selectTitle', title);
-  emit('update:activeItem', '世界观:' + title);
+  router.push(`/editor/world/${title}`);
 }
 
 // 返回主页面
 function goBack() {
   emit('back');
+  router.push('/tool');
 }
 
 // 计算缩进空间
@@ -81,7 +81,7 @@ function getTitleIndentStyle(level: number) {
 
 // 获取标题显示文本（截断过长标题）
 function getTitleDisplayText(title: string, level: number) {
-  const maxLength = 28 - level * 2; // 随着级别增加减少最大长度
+  const maxLength = 28 - level * 2;
   if (title.length <= maxLength) return title;
   return title.substring(0, maxLength - 3) + '...';
 }
@@ -100,7 +100,7 @@ function getTitleDisplayText(title: string, level: number) {
         <div 
           class="nav-item with-arrow" 
           :class="{ 
-            active: activeItem === '世界观',
+            active: route.path.includes('/editor/world'),
             expanded: isWorldExpanded
           }"
           @click="handleWorldClick"
@@ -116,7 +116,7 @@ function getTitleDisplayText(title: string, level: number) {
             :key="index"
             class="sub-menu-item"
             :class="{ 
-              active: activeItem === '世界观:' + title.title,
+              active: route.path === `/editor/world/${title.title}`,
               'level-1': title.level === 1,
               'level-2': title.level === 2,
               'level-3': title.level === 3,
@@ -136,15 +136,15 @@ function getTitleDisplayText(title: string, level: number) {
       
       <div 
         class="nav-item" 
-        :class="{ active: activeItem === '地图' }"
-        @click="setActiveItem('地图')"
+        :class="{ active: route.path === '/editor/map' }"
+        @click="router.push('/editor/map')"
       >
         地图
       </div>
       <div 
         class="nav-item" 
-        :class="{ active: activeItem === '人物' }"
-        @click="setActiveItem('人物')"
+        :class="{ active: route.path === '/editor/characters' }"
+        @click="router.push('/editor/characters')"
       >
         人物
       </div>
