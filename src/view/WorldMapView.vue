@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue';
 import type { WorldData } from '../electron';
 import { useMapCanvas } from '../components/WorldMap/composables/useMapCanvas';
 import { useMapState } from '../components/WorldMap/composables/useMapState';
@@ -7,12 +7,16 @@ import { useMapTools } from '../components/WorldMap/composables/useMapTools';
 import { useMapInteractions } from '../components/WorldMap/composables/useMapInteractions';
 import { useMapData } from '../components/WorldMap/composables/useMapData';
 import { useRouter } from 'vue-router';
+import { useMapStore } from '../stores/mapStore';
+import { useWorldStore } from '../stores/worldStore';
 
 const router = useRouter();
+const mapStore = useMapStore();
+const worldStore = useWorldStore();
 
 // 定义Props
 const props = defineProps<{
-  worldData?: WorldData
+  // 移除worldId，因为我们现在使用store
 }>();
 
 // 定义事件
@@ -23,19 +27,6 @@ const emit = defineEmits<{
 
 // 地图网格大小常量
 const GRID_SIZE = 30;
-
-// 引入地图状态和数据管理
-const { 
-  mapData, 
-  currentLocationId, 
-  loadMapData, 
-  saveLocationDetails, 
-  currentLocation,
-  locationNameInput,
-  locationDescInput,
-  formatLongitude,
-  formatLatitude
-} = useMapData(props, emit);
 
 // 引入地图状态管理
 const {
@@ -59,25 +50,42 @@ const {
   toggleCoordinates,
   toggleDarkMode,
   resetView
-} = useMapState(props.worldData);
+} = useMapState(mapStore);
+
+// 引入地图状态和数据管理
+const { 
+  mapData, 
+  currentLocationId, 
+  loadMapData, 
+  saveLocationDetails, 
+  currentLocation,
+  locationNameInput,
+  locationDescInput,
+  formatLongitude,
+  formatLatitude
+} = useMapData(mapStore);
 
 // 引入画布相关
 const {
   canvasRef,
+  ctxRef,
   canvasWidth,
   canvasHeight,
   drawMap,
   initCanvas,
   handleResize
-} = useMapCanvas(isDarkMode, offsetX, offsetY, scale, mapData, currentLocationId, isDrawingConnection, connectionStartId, dragStartX, dragStartY);
-
-// 引入地图交互功能
-let handleMouseDown: (e: MouseEvent) => void;
-let handleMouseMove: (e: MouseEvent) => void;
-let handleMouseUp: (e: MouseEvent) => void;
-let handleClick: (e: MouseEvent) => void;
-let handleKeyDown: (e: KeyboardEvent) => void;
-let handleWheel: (e: WheelEvent) => void;
+} = useMapCanvas(
+  isDarkMode,
+  offsetX,
+  offsetY,
+  scale,
+  mapData,
+  currentLocationId,
+  isDrawingConnection,
+  connectionStartId,
+  dragStartX,
+  dragStartY
+);
 
 // 引入地图工具栏功能
 const { initMapPosition, fitWorldView } = useMapTools(
@@ -123,27 +131,22 @@ function goBack() {
 
 // 保存地图状态
 function saveMapState() {
-  if (!props.worldData) {
-    console.warn('worldData is undefined');
+  if (!worldStore.$state.id) {
+    console.warn('worldId is undefined');
     return;
   }
   
-  if (!props.worldData.content) {
-    props.worldData.content = {};
-  }
-  if (!props.worldData.content.world_map) {
-    props.worldData.content.world_map = {};
-  }
+  // 更新地图数据
+  mapStore.$patch({
+    position: {
+      x: offsetX.value,
+      y: offsetY.value
+    },
+    scale: scale.value
+  });
   
-  props.worldData.content.world_map.position = {
-    x: offsetX.value,
-    y: offsetY.value
-  };
-  props.worldData.content.world_map.scale = scale.value;
-  props.worldData.content.world_map.updatedAt = new Date().toISOString();
-  
-  emit('update:worldData', props.worldData);
-  emit('save');
+  // 保存到世界数据
+  worldStore.saveWorldData();
 }
 
 // 修改重置视图函数
@@ -153,100 +156,152 @@ function handleResetView() {
 }
 
 // 添加加载状态
-const isLoading = ref(true)
-const error = ref<string | null>(null)
+const isLoading = ref(true);
+const error = ref<string | null>(null);
 
-// 监听worldData变化
-watch(() => props.worldData, (newData) => {
-    console.log('worldData changed:', newData);
-    if (newData) {
-        isLoading.value = false
-        error.value = null
-        // 初始化地图数据
-        initMapData(newData)
-    } else {
-        error.value = '未找到世界数据'
-        isLoading.value = false
-    }
-}, { immediate: true })
+// 监听store中的worldId变化
+watch(() => worldStore.$state.id, (newId) => {
+  if (newId) {
+    isLoading.value = true;
+    error.value = null;
+    worldStore.loadWorldData(newId).then(() => {
+      isLoading.value = false;
+      initMapData();
+    }).catch((e) => {
+      error.value = '加载地图数据失败';
+      console.error('Map initialization error:', e);
+      isLoading.value = false;
+    });
+  } else {
+    error.value = '未找到世界ID';
+    isLoading.value = false;
+  }
+}, { immediate: true });
 
-// 初始化地图数据
-const initMapData = (data: WorldData) => {
-    console.log('Initializing map data:', data);
-    try {
-        // 初始化地图状态
-        const { mapData, loadMapData } = useMapData(props, emit)
-        console.log('Current mapData:', mapData.value);
-        loadMapData()
-        console.log('After loadMapData:', mapData.value);
-        
-        // 初始化画布
-        const { initCanvas } = useMapCanvas(
-            isDarkMode,
-            offsetX,
-            offsetY,
-            scale,
-            mapData,
-            currentLocationId,
-            isDrawingConnection,
-            connectionStartId,
-            dragStartX,
-            dragStartY
-        )
-        initCanvas()
-        
-        // 初始化交互
-        const interactions = useMapInteractions(
-            canvasRef,
-            mapData,
-            isDragging,
-            dragStartX,
-            dragStartY,
-            offsetX,
-            offsetY,
-            scale,
-            isDrawingConnection,
-            connectionStartId,
-            currentLocationId,
-            locationNameInput,
-            locationDescInput,
-            isEditing,
-            activeTool,
-            mouseX,
-            mouseY,
-            drawMap
-        )
-        
-        // 将交互函数赋值给组件变量
-        handleMouseDown = interactions.handleMouseDown
-        handleMouseMove = interactions.handleMouseMove
-        handleMouseUp = interactions.handleMouseUp
-        handleClick = interactions.handleClick
-        handleKeyDown = interactions.handleKeyDown
-        handleWheel = interactions.handleWheel
-    } catch (e) {
-        error.value = '初始化地图数据失败'
-        console.error('Map initialization error:', e)
-    }
+// 声明交互处理函数的类型
+interface MapInteractions {
+  handleMouseDown: (e: MouseEvent) => void;
+  handleMouseMove: (e: MouseEvent) => void;
+  handleMouseUp: (e: MouseEvent) => void;
+  handleClick: (e: MouseEvent) => void;
+  handleKeyDown: (e: KeyboardEvent) => void;
+  handleWheel: (e: WheelEvent) => void;
 }
 
+// 声明交互处理函数
+let handleMouseDown = (e: MouseEvent) => {};
+let handleMouseMove = (e: MouseEvent) => {};
+let handleMouseUp = (e: MouseEvent) => {};
+let handleClick = (e: MouseEvent) => {};
+let handleKeyDown = (e: KeyboardEvent) => {};
+let handleWheel = (e: WheelEvent) => {};
+
+// 初始化地图数据
+const initMapData = async () => {
+  try {
+    await nextTick();  // 等待 DOM 更新
+    
+    if (!canvasRef.value) {
+      console.error('Canvas element not found');
+      return;
+    }
+
+    // 获取画布上下文
+    const ctx = canvasRef.value.getContext('2d');
+    if (!ctx) {
+      console.error('Failed to get canvas context');
+      return;
+    }
+    ctxRef.value = ctx;
+
+    // 初始化地图工具
+    const mapTools = useMapTools(
+      canvasRef,
+      offsetX,
+      offsetY,
+      scale,
+      drawMap,
+      minScale.value,
+      maxScale.value
+    );
+
+    // 初始化地图交互
+    const interactions = useMapInteractions(
+      canvasRef,
+      mapData,
+      isDragging,
+      dragStartX,
+      dragStartY,
+      offsetX,
+      offsetY,
+      scale,
+      isDrawingConnection,
+      connectionStartId,
+      currentLocationId,
+      locationNameInput,
+      locationDescInput,
+      isEditing,
+      activeTool,
+      mouseX,
+      mouseY,
+      drawMap
+    );
+
+    // 分配交互处理函数
+    handleMouseDown = interactions.handleMouseDown;
+    handleMouseMove = interactions.handleMouseMove;
+    handleMouseUp = interactions.handleMouseUp;
+    handleClick = interactions.handleClick;
+    handleKeyDown = interactions.handleKeyDown;
+    handleWheel = interactions.handleWheel;
+
+    // 初始化画布
+    initCanvas();
+    handleResize();
+
+    console.log('Map interactions initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize map:', error);
+  }
+};
+
 // 初始化
-onMounted(() => {
-  initCanvas();
-  loadMapData();
-  
-  // 监听快捷键
-  window.addEventListener('keydown', handleKeyDown);
-  
-  // 监听窗口大小变化
-  window.addEventListener('resize', handleResize);
-  handleResize();
-  
-  // 设置定时器初始渲染
-  setTimeout(() => {
-    drawMap();
-  }, 100);
+onMounted(async () => {
+  try {
+    console.log('组件挂载，开始初始化');
+    
+    // 等待 DOM 更新完成
+    await nextTick();
+    
+    // 监听快捷键
+    window.addEventListener('keydown', handleKeyDown);
+    
+    // 监听窗口大小变化
+    window.addEventListener('resize', handleResize);
+    
+    // 如果已有worldId，等待数据加载完成后初始化
+    if (worldStore.$state.id) {
+      await worldStore.loadWorldData(worldStore.$state.id);
+      await initMapData();
+    }
+    
+    // 处理窗口大小变化
+    handleResize();
+    
+    console.log('组件初始化完成');
+  } catch (e) {
+    console.error('挂载时初始化失败:', e);
+    error.value = '初始化失败：' + (e instanceof Error ? e.message : String(e));
+  }
 });
+
+// 监听数据变化
+watch(() => mapStore.mapData, (newData) => {
+  console.log('地图数据更新:', newData);
+  if (newData && canvasRef.value && ctxRef.value) {
+    drawMap();
+  }
+}, { deep: true });
 
 // 清理
 onBeforeUnmount(() => {

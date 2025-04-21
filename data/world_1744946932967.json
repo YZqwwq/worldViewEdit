@@ -10,6 +10,41 @@
       "content": {
         "text": "# aldskfja;\n\n## 有人写markdown吗"
       }
-    }
+    },
+    "world_map": {
+      "updatedAt": "2025-04-20T16:57:50.106Z",
+      "position": {
+        "offsetX": 0,
+        "offsetY": 0
+      },
+      "scale": 1,
+      "rotation": 0
+    },
+    "character": {
+      "ch1": {
+        "updatedAt": "2025-04-20T16:57:50.106Z",
+        "descriptors": {
+          "name": "",
+          "age": "",
+          "gender": "",
+          "occupation": "",
+          "character_profile": "",
+          "character_development": ""
+        },
+        "relationships": {
+          "family": [],
+          "friends": [],
+          "enemies": [],
+          "allies": []
+        }
+      } 
+    },
+    "factions": {
+      "f1": {
+        "name": "",
+        "description": "",
+        "members": []
+      }
+    } 
   }
 }

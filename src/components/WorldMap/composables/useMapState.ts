@@ -1,11 +1,12 @@
 import { ref } from 'vue';
-import type { WorldData } from '../../../electron';
+import type { Store } from 'pinia';
+import type { MapState } from '../../../stores/mapStore';
 
 /**
  * 地图状态管理
  * 包含所有与地图状态相关的响应式变量和方法
  */
-export function useMapState(worldData?: WorldData, drawMap?: () => void) {
+export function useMapState(mapStore: Store<'map', MapState>, drawMap?: () => void) {
   // 编辑状态
   const isEditing = ref(false);
   
@@ -14,13 +15,10 @@ export function useMapState(worldData?: WorldData, drawMap?: () => void) {
   const dragStartX = ref(0);
   const dragStartY = ref(0);
   
-  // 从worldData中读取保存的位置和缩放比例
-  const initialPosition = worldData?.content?.world_map?.position || { x: 0, y: 0 };
-  const initialScale = worldData?.content?.world_map?.scale || 0.5;
-  
-  const offsetX = ref(initialPosition.x);
-  const offsetY = ref(initialPosition.y);
-  const scale = ref(initialScale);
+  // 从mapStore中读取保存的位置和缩放比例
+  const offsetX = ref(mapStore.position.x);
+  const offsetY = ref(mapStore.position.y);
+  const scale = ref(mapStore.scale);
   
   // 缩放限制
   const minScale = ref(0.2);

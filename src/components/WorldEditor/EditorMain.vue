@@ -3,6 +3,8 @@ import { defineProps, defineEmits, ref, watch, onMounted, onBeforeUnmount, compu
 import type { WorldData } from '../../electron';
 import ProseMirrorEditor from './ProseMirrorEditor.vue';
 import { useRouter, useRoute } from 'vue-router';
+import { EditorView } from 'prosemirror-view';
+import { TextSelection } from 'prosemirror-state';
 
 // 获取路由实例
 const router = useRouter();
@@ -27,8 +29,11 @@ const emit = defineEmits<{
 // 编辑器内容
 const editorContent = ref('');
 
-// 编辑器实例引用
-const editorRef = ref(null);
+interface EditorRef {
+  view: EditorView;
+}
+
+const editorRef = ref<EditorRef | null>(null);
 
 // 组件刷新机制
 const componentKey = ref(0);
@@ -36,8 +41,14 @@ function refreshComponent() {
   componentKey.value += 1;
 }
 
+interface ThemeChangeEvent extends CustomEvent {
+  detail: {
+    theme: string;
+  };
+}
+
 // 监听主题变化事件
-function handleThemeChange(event: CustomEvent) {
+function handleThemeChange(event: ThemeChangeEvent) {
   console.log('EditorMain组件检测到主题变化:', event.detail.theme);
   setTimeout(() => {
     refreshComponent();
@@ -96,30 +107,55 @@ onBeforeUnmount(() => {
 });
 
 // 滚动到指定标题
-function scrollToTitle(titleName: string) {
-  // 暂时不实现，后续需要通过ProseMirror实现
-  console.log('请求滚动到标题:', titleName);
+const scrollToTitle = (titleName: string) => {
+  if (!editorRef.value) return;
+  
+  const view = editorRef.value.view;
+  const state = view.state;
+  let foundPos = -1;
+
+  state.doc.descendants((node, pos) => {
+    if (node.type.name === 'heading' && node.textContent === titleName) {
+      foundPos = pos;
+      return false;
+    }
+    return true;
+  });
+
+  if (foundPos !== -1) {
+    const tr = state.tr.setSelection(TextSelection.near(state.doc.resolve(foundPos)));
+    view.dispatch(tr);
+    view.dom.parentElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+};
+
+// 定义标题接口
+interface Title {
+  title: string;
+  level: number;
+  position: number;
 }
 
 // 从内容中提取标题
-function extractTitlesFromContent() {
-  const content = editorContent.value;
+function extractTitlesFromContent(): void {
+  const content: string = editorContent.value;
   if (!content) {
     emit('extractTitles', []);
     return;
   }
   
   // 使用正则表达式匹配所有标题
-  const titleRegex = /^(#{1,6})\s+(.+)$/gm;
-  const titles = [];
-  let match;
+  const titleRegex: RegExp = /^(#{1,6})\s+(.+)$/gm;
+  const titles: Title[] = [];
+  let match: RegExpExecArray | null;
   
   while ((match = titleRegex.exec(content)) !== null) {
-    titles.push({
+    const title: Title = {
       title: match[2].trim(),
       level: match[1].length,
       position: match.index
-    });
+    };
+    titles.push(title);
   }
   
   console.log('提取到标题数量:', titles.length);
@@ -177,23 +213,10 @@ const isWorldviewTextContent = computed(() => {
   return props.activeItem === '世界观' || props.activeItem.startsWith('世界观:');
 });
 
-// 是否显示地图编辑器
-const isMapContent = computed(() => {
-  return props.activeItem === '地图';
-});
-
-// 是否显示人物编辑器
-const isCharacterContent = computed(() => {
-  return props.activeItem === '人物';
-});
-
 // 定义是否是世界观内容
 const isWorldviewContent = computed(() => {
-  // 世界观相关的内容
   return props.activeItem === '世界观' || 
-         props.activeItem.startsWith('世界观:') || 
-         props.activeItem === '地图' ||
-         props.activeItem === '人物';
+         props.activeItem.startsWith('世界观:');
 });
 
 // 获取标题函数
@@ -202,10 +225,6 @@ function getHeaderTitle() {
     return '世界观总览';
   } else if (props.activeItem.startsWith('世界观:')) {
     return props.activeItem.substring(4); // 移除"世界观:"前缀
-  } else if (props.activeItem === '地图') {
-    return '地图编辑';
-  } else if (props.activeItem === '人物') {
-    return '人物管理';
   }
   return props.activeItem;
 }
@@ -248,12 +267,6 @@ function handleWorldDataUpdate(updatedWorldData: WorldData) {
             @save="saveContent"
           />
         </div>
-      </div>
-      
-      <!-- 其他内容类型的显示容器 -->
-      <div v-else class="other-content-container">
-        <!-- 这里可以根据activeItem显示不同的内容编辑组件 -->
-        <p>{{ activeItem }} 编辑器开发中...</p>
       </div>
     </div>
   </div>
@@ -337,16 +350,6 @@ function handleWorldDataUpdate(updatedWorldData: WorldData) {
     height: 100%;
     padding: 2rem;
     color: var(--error-color, #f44336);
-    text-align: center;
-  }
-  
-  // 其他内容容器
-  .other-content-container, .character-editor-placeholder {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    color: var(--text-secondary);
     text-align: center;
   }
 }

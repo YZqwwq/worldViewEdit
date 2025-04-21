@@ -1,41 +1,38 @@
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
+import type { Store } from 'pinia';
+import type { MapState } from '../../../stores/mapStore';
 import type { WorldData } from '../../../electron';
-
-interface MapLocation {
-  id: string;
-  name: string;
-  description: string;
-  x: number;
-  y: number;
-  connections: string[];
-}
-
-interface MapConnection {
-  id: string;
-  from: string;
-  to: string;
-  description?: string;
-}
-
-interface MapData {
-  name: string;
-  description: string;
-  locations: MapLocation[];
-  connections: MapConnection[];
-}
+import type { MapData, MapLocation } from '../../../types/map';
 
 /**
  * 地图数据管理
- * 负责加载、保存和管理地图数据
+ * 负责处理地图数据的加载、保存和更新
  */
-export function useMapData(props: { worldData?: WorldData }, emit: any) {
-  // 当前地图数据
-  const mapData = ref<MapData>({
-    name: '新地图',
-    description: '',
-    locations: [],
-    connections: []
-  });
+export function useMapData(mapStore: Store<'map', MapState>, worldData?: WorldData) {
+  // 地图数据
+  const mapData = ref<MapData>(mapStore.mapData);
+  
+  // 监听mapStore中的数据变化
+  watch(() => mapStore.mapData, (newData) => {
+    mapData.value = newData;
+  }, { deep: true });
+  
+  // 保存地图数据
+  function saveMapData() {
+    mapStore.$patch({ mapData: mapData.value });
+  }
+  
+  // 加载地图数据
+  function loadMapData(data: MapData) {
+    mapData.value = data;
+    mapStore.$patch({ mapData: data });
+  }
+  
+  // 更新地图数据
+  function updateMapData(newData: MapData) {
+    mapData.value = newData;
+    mapStore.$patch({ mapData: newData });
+  }
   
   // 编辑状态
   const currentLocationId = ref<string>('');
@@ -44,70 +41,22 @@ export function useMapData(props: { worldData?: WorldData }, emit: any) {
   
   // 当前选中的位置
   const currentLocation = computed(() => {
-    if (!props.worldData?.content?.world_map?.locations) return null;
-    return props.worldData.content.world_map.locations.find((loc: MapLocation) => loc.id === currentLocationId.value);
+    if (!worldData?.content?.world_map?.locations) return null;
+    return worldData.content.world_map.locations.find((loc: MapLocation) => loc.id === currentLocationId.value);
   });
-  
-  // 从世界数据加载地图
-  function loadMapData() {
-    if (!props.worldData?.content?.world_map) {
-      console.warn('worldData or its content is undefined');
-      return;
-    }
-    
-    mapData.value = {
-      name: props.worldData.content.world_map.name || '新地图',
-      description: props.worldData.content.world_map.description || '',
-      locations: props.worldData.content.world_map.locations || [],
-      connections: props.worldData.content.world_map.connections || []
-    };
-  }
   
   // 保存位置信息
   function saveLocationDetails() {
     if (!currentLocationId.value) return;
     
     const location = mapData.value.locations.find(
-      (loc: MapLocation) => loc.id === currentLocationId.value
+      (loc) => loc.id === currentLocationId.value
     );
     
     if (location) {
       location.name = locationNameInput.value;
       location.description = locationDescInput.value;
     }
-  }
-  
-  // 保存地图数据
-  function saveMapData() {
-    if (!props.worldData) {
-      console.warn('worldData is undefined');
-      return;
-    }
-    
-    const now = new Date().toISOString();
-    const mapId = 'map_' + Date.now();
-    const mapContent = {
-      id: mapId,
-      name: mapData.value.name,
-      description: mapData.value.description,
-      locations: mapData.value.locations,
-      updatedAt: now
-    };
-    
-    const worldmaps = props.worldData.content?.worldmaps || {};
-    worldmaps[mapId] = mapContent;
-    
-    const updatedWorldData = {
-      ...props.worldData,
-      updatedAt: now,
-      content: {
-        ...props.worldData.content,
-        worldmaps
-      }
-    };
-    
-    emit('updateWorldData', updatedWorldData);
-    emit('save');
   }
   
   // 格式化经度显示（添加东经/西经）
@@ -128,9 +77,10 @@ export function useMapData(props: { worldData?: WorldData }, emit: any) {
     locationNameInput,
     locationDescInput,
     currentLocation,
-    loadMapData,
-    saveLocationDetails,
     saveMapData,
+    loadMapData,
+    updateMapData,
+    saveLocationDetails,
     formatLongitude,
     formatLatitude
   };

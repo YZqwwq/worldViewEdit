@@ -63,20 +63,13 @@ function handleWorldClick() {
 
 // 选择标题
 function selectTitle(title: string) {
+  // 只触发事件，让父组件处理编辑器内的跳转
   emit('selectTitle', title);
-  router.push(`/editor/world/${title}`);
 }
 
 // 返回主页面
 function goBack() {
-  emit('back');
-  // 获取当前的 id 参数
-  const currentId = route.query.id;
-  // 返回到工具页面，并保留 id 参数
-  router.push({
-    path: '/tool',
-    query: currentId ? { id: currentId } : {}
-  });
+  router.push('/');
 }
 
 // 计算缩进空间
@@ -142,29 +135,26 @@ function getTitleDisplayText(title: string, level: number) {
     </div>
     
     <!-- 返回按钮 -->
-    <div class="back-button-container">
-      <button class="back-button" @click="goBack">返回</button>
+    <div class="back-button" @click="goBack">
+      <i class="fas fa-arrow-left"></i>
+      <span>返回</span>
     </div>
   </div>
 </template>
 
 <style lang="scss" scoped>
 .editor-sidebar {
-  width: 220px;
+  width: 180px;
   height: 100vh;
-  background-color: var(--sidebar-bg);
-  color: var(--sidebar-text);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   overflow-y: auto;
-  position: sticky;
-  left: 0;
-  top: 0;
-  z-index: 100;
-  box-shadow: var(--box-shadow);
   border-right: 1px solid var(--border-color);
-  transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
+  z-index: 10;
 }
 
 .editor-title {
@@ -283,25 +273,40 @@ function getTitleDisplayText(title: string, level: number) {
   font-style: italic;
 }
 
-.back-button-container {
+.back-button {
   margin-top: auto;
   padding: 20px 0;
   display: flex;
   justify-content: center;
-}
-
-.back-button {
-  padding: 8px 20px;
+  align-items: center;
+  cursor: pointer;
+  transition: background-color 0.3s;
   background-color: var(--error);
   color: white;
   border: none;
   border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.3s;
   font-size: 14px;
   
   &:hover {
     background-color: var(--error-dark);
+  }
+}
+
+.menu-item {
+  padding: 15px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color-light);
+  text-align: center;
+  transition: background-color 0.3s, color 0.3s;
+  
+  &:hover {
+    background-color: var(--sidebar-hover-bg);
+  }
+  
+  &.active {
+    background-color: var(--sidebar-active-bg);
+    color: var(--sidebar-active-text);
+    font-weight: bold;
   }
 }
 </style> 

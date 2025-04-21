@@ -4,11 +4,10 @@ import { useRouter, useRoute } from 'vue-router';
 import { useWorldStore } from '../stores/worldStore';
 import EditorSidebar from '../components/WorldEditor/EditorSidebar.vue';
 import EditorMain from '../components/WorldEditor/EditorMain.vue';
+import type { WorldData } from '../electron';
 
 // 定义当前选中的侧边栏项
 const activeItem = ref('世界观');
-// 当前编辑的世界观ID
-const worldId = ref('');
 
 // 使用Pinia store
 const worldStore = useWorldStore();
@@ -21,21 +20,33 @@ const route = useRoute();
 onMounted(() => {
   // 从URL参数中获取世界观ID
   const id = route.query.id as string;
+  console.log('WorldEditorView mounted, id:', id);
   if (id) {
-    worldId.value = id;
     // 使用store加载世界观数据
-    worldStore.loadWorldData(id);
+    worldStore.loadWorldData(id).then(() => {
+      console.log('World data loaded:', worldStore.$state.worldData);
+      // 将worldData添加到路由查询参数中
+      router.push({
+        path: route.path,
+        query: {
+          ...route.query,
+          worldData: JSON.stringify(worldStore.$state.worldData)
+        }
+      });
+    });
   } else {
     // 没有ID参数，显示错误
-    worldStore.isLoading = false;
-    worldStore.errorMsg = '未提供世界观ID';
+    worldStore.$patch({ 
+      isLoading: false,
+      errorMsg: '未提供世界观ID'
+    });
   }
 });
 
 // 当选择标题时的处理函数
 function handleSelectTitle(title: string) {
-  console.log('选择了标题:', title);
-  // 标题选择的逻辑由EditorMain组件内部处理，这里不需要额外操作
+  // 更新当前选中的标题，添加前缀以区分
+  activeItem.value = `世界观:${title}`;
 }
 
 // 处理从编辑器中提取的标题
@@ -49,7 +60,7 @@ function handleUpdateContent(content: any) {
 }
 
 // 处理完整世界观数据更新
-function handleUpdateWorldData(updatedData: any) {
+function handleUpdateWorldData(updatedData: WorldData) {
   worldStore.updateWorldData(updatedData);
 }
 
@@ -64,7 +75,7 @@ function goBack() {
     <!-- 使用侧边栏组件 -->
     <EditorSidebar 
       v-model:activeItem="activeItem"
-      :worldTitles="worldStore.extractedTitles"
+      :worldTitles="worldStore.$state.extractedTitles"
       @back="goBack"
       @selectTitle="handleSelectTitle"
     />
@@ -72,9 +83,9 @@ function goBack() {
     <!-- 使用主编辑区域组件，使用store的isDataLoaded getter来确定何时渲染 -->
     <EditorMain
       v-if="worldStore.isDataLoaded"
-      :isLoading="worldStore.isLoading"
-      :errorMsg="worldStore.errorMsg"
-      :worldData="worldStore.worldData"
+      :isLoading="worldStore.$state.isLoading"
+      :errorMsg="worldStore.$state.errorMsg || ''"
+      :worldData="(worldStore.$state.worldData || {}) as WorldData"
       :activeItem="activeItem"
       @back="goBack"
       @updateContent="handleUpdateContent"
@@ -99,7 +110,7 @@ function goBack() {
   padding: 0;
   overflow: hidden;
   position: relative;
-  background-color: #f5f5f5;
+  background-color: var(--bg-primary);
 }
 
 /* 添加加载中样式 */
@@ -121,7 +132,7 @@ function goBack() {
   
   p {
     margin-top: 1rem;
-    color: #666;
+    color: var(--text-secondary);
   }
 }
 
