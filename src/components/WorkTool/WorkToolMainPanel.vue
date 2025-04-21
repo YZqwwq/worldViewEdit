@@ -3,6 +3,11 @@ import { useRouter } from 'vue-router';
 
 const router = useRouter();
 
+// 定义事件
+const emit = defineEmits<{
+  (e: 'select-tool', path: string): void
+}>();
+
 // 工具列表
 const tools = [
   {
@@ -27,7 +32,7 @@ const tools = [
 
 // 打开工具
 function openTool(path: string) {
-  router.push(path);
+  emit('select-tool', path);
 }
 </script>
 

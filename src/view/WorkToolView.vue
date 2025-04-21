@@ -1,9 +1,38 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
+import { useWorldStore } from '../stores/worldStore';
 import WorkToolMainPanel from '../components/WorkTool/WorkToolMainPanel.vue';
 
 const router = useRouter();
+const route = useRoute();
+const worldStore = useWorldStore();
+
+// 世界观ID
+const worldId = ref('');
+
+// 在组件挂载时获取并处理世界观ID
+onMounted(() => {
+  const id = route.query.id as string;
+  if (id) {
+    worldId.value = id;
+    // 预加载世界观数据
+    worldStore.loadWorldData(id);
+  }
+});
+
+// 打开工具
+function handleToolSelect(path: string) {
+  // 如果有世界观ID，则传递给目标路由
+  if (worldId.value) {
+    router.push({
+      path: path,
+      query: { id: worldId.value }
+    });
+  } else {
+    router.push(path);
+  }
+}
 
 // 返回主页面
 function goBack() {
@@ -21,7 +50,7 @@ function goBack() {
       <h1>工具</h1>
     </div>
     
-    <WorkToolMainPanel />
+    <WorkToolMainPanel @select-tool="handleToolSelect" />
   </div>
 </template>
 
