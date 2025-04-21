@@ -20,13 +20,13 @@ const tools = [
     id: 'world-map',
     name: '世界地图编辑器',
     icon: 'fa-map',
-    path: '/editor/map'
+    path: '/map'
   },
   {
     id: 'character',
     name: '角色设定编辑器',
     icon: 'fa-user',
-    path: '/editor/characters'
+    path: '/characters'
   }
 ];
 

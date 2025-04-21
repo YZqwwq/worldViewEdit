@@ -1,10 +1,11 @@
 import { ref } from 'vue';
+import type { WorldData } from '../../../electron';
 
 /**
  * 地图状态管理
  * 包含所有与地图状态相关的响应式变量和方法
  */
-export function useMapState() {
+export function useMapState(worldData?: WorldData, drawMap?: () => void) {
   // 编辑状态
   const isEditing = ref(false);
   
@@ -12,16 +13,21 @@ export function useMapState() {
   const isDragging = ref(false);
   const dragStartX = ref(0);
   const dragStartY = ref(0);
-  const offsetX = ref(0);
-  const offsetY = ref(0);
   
-  // 缩放状态
-  const scale = ref(0.5); // 默认缩放比例
-  const minScale = ref(0.2); // 限制最小缩放值为0.2，对应每格30°
+  // 从worldData中读取保存的位置和缩放比例
+  const initialPosition = worldData?.content?.world_map?.position || { x: 0, y: 0 };
+  const initialScale = worldData?.content?.world_map?.scale || 0.5;
+  
+  const offsetX = ref(initialPosition.x);
+  const offsetY = ref(initialPosition.y);
+  const scale = ref(initialScale);
+  
+  // 缩放限制
+  const minScale = ref(0.2);
   const maxScale = ref(5);
   
   // 工具栏状态
-  const activeTool = ref('select'); // select, add, connect, delete
+  const activeTool = ref('select');
   const isDrawingConnection = ref(false);
   const connectionStartId = ref('');
   
@@ -35,31 +41,32 @@ export function useMapState() {
   
   // 地图范围限制
   const mapLimits = {
-    minLatitude: -90, // 南纬90度
-    maxLatitude: 90,  // 北纬90度
-    minLongitude: -180, // 西经180度
-    maxLongitude: 180   // 东经180度
+    minLatitude: -90,
+    maxLatitude: 90,
+    minLongitude: -180,
+    maxLongitude: 180
   };
   
   // 设置活动工具
   function setActiveTool(tool: string) {
     activeTool.value = tool;
-    
-    // 重置状态
     isDrawingConnection.value = false;
     connectionStartId.value = '';
     
-    // 如果切换到其他工具，退出编辑模式
     if (tool !== 'select' && isEditing.value) {
       isEditing.value = false;
     }
   }
   
-  // 重置地图视图
+  // 重置地图视图到初始位置（赤道与本初子午线交点）
   function resetView() {
-    scale.value = 0.2; // 设置为0.2，对应每格30度的网格间隔
+    scale.value = 0.5; // 设置为50%缩放
     offsetX.value = 0;
     offsetY.value = 0;
+    // 如果提供了drawMap函数，则调用它重绘地图
+    if (drawMap) {
+      drawMap();
+    }
   }
   
   // 切换坐标显示
@@ -89,10 +96,9 @@ export function useMapState() {
     isDragging,
     dragStartX,
     dragStartY,
-    mapLimits,
     setActiveTool,
-    resetView,
     toggleCoordinates,
-    toggleDarkMode
+    toggleDarkMode,
+    resetView
   };
 } 

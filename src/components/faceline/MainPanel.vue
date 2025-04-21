@@ -238,9 +238,9 @@ async function handleConfirmCreate() {
     await loadWorldFiles();
     
     // 使用 Vue Router 导航到世界观编辑页面
-    console.log('准备导航到编辑页面，路径:', `/editor?id=${id}`);
+    console.log('准备导航到编辑页面，路径:', `/editor/world?id=${id}`);
     router.push({
-      path: '/editor',
+      path: '/editor/world',
       query: { id }
     });
   } catch (error) {

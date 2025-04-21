@@ -1,69 +1,66 @@
 import { ref, computed } from 'vue';
 import type { WorldData } from '../../../electron';
 
+interface MapLocation {
+  id: string;
+  name: string;
+  description: string;
+  x: number;
+  y: number;
+  connections: string[];
+}
+
+interface MapConnection {
+  id: string;
+  from: string;
+  to: string;
+  description?: string;
+}
+
+interface MapData {
+  name: string;
+  description: string;
+  locations: MapLocation[];
+  connections: MapConnection[];
+}
+
 /**
  * 地图数据管理
  * 负责加载、保存和管理地图数据
  */
-export function useMapData(props: { worldData: WorldData }, emit: any) {
+export function useMapData(props: { worldData?: WorldData }, emit: any) {
   // 当前地图数据
-  const mapData = ref({
-    name: '',
+  const mapData = ref<MapData>({
+    name: '新地图',
     description: '',
-    locations: [] as Array<{
-      id: string;
-      name: string;
-      description: string;
-      x: number;
-      y: number;
-      connections: string[];
-    }>
+    locations: [],
+    connections: []
   });
   
   // 编辑状态
-  const currentLocationId = ref('');
+  const currentLocationId = ref<string>('');
   const locationNameInput = ref('');
   const locationDescInput = ref('');
   
   // 当前选中的位置
   const currentLocation = computed(() => {
-    if (!currentLocationId.value) return null;
-    return mapData.value.locations.find(loc => loc.id === currentLocationId.value) || null;
+    if (!props.worldData?.content?.world_map?.locations) return null;
+    return props.worldData.content.world_map.locations.find((loc: MapLocation) => loc.id === currentLocationId.value);
   });
   
   // 从世界数据加载地图
   function loadMapData() {
-    if (props.worldData?.content?.worldmaps) {
-      // 默认加载第一个地图
-      const maps = Object.values(props.worldData.content.worldmaps);
-      if (maps.length > 0) {
-        const firstMap = maps[0] as { 
-          name?: string, 
-          description?: string, 
-          locations?: Array<{
-            id: string;
-            name: string;
-            description: string;
-            x: number;
-            y: number;
-            connections: string[];
-          }>
-        };
-        
-        mapData.value = {
-          name: firstMap.name || '新地图',
-          description: firstMap.description || '',
-          locations: firstMap.locations || []
-        };
-      } else {
-        // 创建新地图
-        mapData.value = {
-          name: '新地图',
-          description: '描述你的世界地图',
-          locations: []
-        };
-      }
+    if (!props.worldData?.content?.world_map) {
+      console.warn('worldData or its content is undefined');
+      return;
     }
+    
+    mapData.value = {
+      name: props.worldData.content.world_map.name || '新地图',
+      description: props.worldData.content.world_map.description || '',
+      locations: props.worldData.content.world_map.locations || [],
+      connections: props.worldData.content.world_map.connections || []
+    };
   }
   
   // 保存位置信息
@@ -71,7 +68,7 @@ export function useMapData(props: { worldData: WorldData }, emit: any) {
     if (!currentLocationId.value) return;
     
     const location = mapData.value.locations.find(
-      loc => loc.id === currentLocationId.value
+      (loc: MapLocation) => loc.id === currentLocationId.value
     );
     
     if (location) {
@@ -82,10 +79,12 @@ export function useMapData(props: { worldData: WorldData }, emit: any) {
   
   // 保存地图数据
   function saveMapData() {
-    // 创建当前时间戳
-    const now = new Date().toISOString();
+    if (!props.worldData) {
+      console.warn('worldData is undefined');
+      return;
+    }
     
-    // 准备地图数据
+    const now = new Date().toISOString();
     const mapId = 'map_' + Date.now();
     const mapContent = {
       id: mapId,
@@ -95,7 +94,6 @@ export function useMapData(props: { worldData: WorldData }, emit: any) {
       updatedAt: now
     };
     
-    // 准备要更新的完整世界观数据
     const worldmaps = props.worldData.content?.worldmaps || {};
     worldmaps[mapId] = mapContent;
     
@@ -108,7 +106,6 @@ export function useMapData(props: { worldData: WorldData }, emit: any) {
       }
     };
     
-    // 发送更新整个世界观数据的事件
     emit('updateWorldData', updatedWorldData);
     emit('save');
   }

@@ -479,7 +479,7 @@ export function useMapRenderer(
         } else if (longitude > 0) {
           labelText = `${longitude}°E`;
         } else if (longitude < 0) {
-          labelText = `${Math.abs(longitude)}°E`;
+          labelText = `${Math.abs(longitude)}°W`;
         }
         
         // 绘制标签背景提高可读性
@@ -526,15 +526,11 @@ export function useMapRenderer(
         let labelText = "";
         // 特殊位置使用特殊标签
         if (actualLatitude === 0) {
-          labelText = '赤道';
-        } else if (actualLatitude === 90) {
-          labelText = '北极';
-        } else if (actualLatitude === -90) {
-          labelText = '南极';
+          labelText = '0°';
         } else if (actualLatitude > 0) {
-          labelText = `${actualLatitude}°N`;
+          labelText = `${actualLatitude}°S`;
         } else {
-          labelText = `${Math.abs(actualLatitude)}°S`;
+          labelText = `${Math.abs(actualLatitude)}°N`;
         }
         
         // 绘制标签背景提高可读性

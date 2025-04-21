@@ -1,20 +1,23 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue';
-import type { WorldData } from '../../electron';
-import { useMapCanvas } from './composables/useMapCanvas';
-import { useMapState } from './composables/useMapState';
-import { useMapTools } from './composables/useMapTools';
-import { useMapInteractions } from './composables/useMapInteractions';
-import { useMapData } from './composables/useMapData';
+import type { WorldData } from '../electron';
+import { useMapCanvas } from '../components/WorldMap/composables/useMapCanvas';
+import { useMapState } from '../components/WorldMap/composables/useMapState';
+import { useMapTools } from '../components/WorldMap/composables/useMapTools';
+import { useMapInteractions } from '../components/WorldMap/composables/useMapInteractions';
+import { useMapData } from '../components/WorldMap/composables/useMapData';
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
 
 // 定义Props
 const props = defineProps<{
-  worldData: WorldData;
+  worldData?: WorldData
 }>();
 
 // 定义事件
 const emit = defineEmits<{
-  (e: 'updateWorldData', worldData: WorldData): void;
+  (e: 'update:worldData', data: WorldData): void;
   (e: 'save'): void;
 }>();
 
@@ -27,7 +30,6 @@ const {
   currentLocationId, 
   loadMapData, 
   saveLocationDetails, 
-  saveMapData,
   currentLocation,
   locationNameInput,
   locationDescInput,
@@ -55,8 +57,9 @@ const {
   dragStartY,
   setActiveTool,
   toggleCoordinates,
-  toggleDarkMode
-} = useMapState();
+  toggleDarkMode,
+  resetView
+} = useMapState(props.worldData);
 
 // 引入画布相关
 const {
@@ -69,26 +72,15 @@ const {
 } = useMapCanvas(isDarkMode, offsetX, offsetY, scale, mapData, currentLocationId, isDrawingConnection, connectionStartId, dragStartX, dragStartY);
 
 // 引入地图交互功能
-const {
-  handleMouseDown,
-  handleMouseMove,
-  handleMouseUp,
-  handleClick,
-  handleKeyDown,
-  handleWheel,
-  addNewLocation,
-  handleConnectionStart,
-  deleteLocation,
-  findClickedLocation
-} = useMapInteractions(
-  canvasRef, mapData, isDragging, dragStartX, dragStartY, 
-  offsetX, offsetY, scale, isDrawingConnection, connectionStartId,
-  currentLocationId, locationNameInput, locationDescInput, isEditing,
-  activeTool, mouseX, mouseY, drawMap
-);
+let handleMouseDown: (e: MouseEvent) => void;
+let handleMouseMove: (e: MouseEvent) => void;
+let handleMouseUp: (e: MouseEvent) => void;
+let handleClick: (e: MouseEvent) => void;
+let handleKeyDown: (e: KeyboardEvent) => void;
+let handleWheel: (e: WheelEvent) => void;
 
 // 引入地图工具栏功能
-const { initMapPosition, resetView, fitWorldView } = useMapTools(
+const { initMapPosition, fitWorldView } = useMapTools(
   canvasRef, 
   offsetX, 
   offsetY, 
@@ -120,6 +112,124 @@ const formattedLatitude = computed(() =>
   formatLatitude(currentLocationCoordinates.value.latitude)
 );
 
+// 返回工具页面
+function goBack() {
+  const currentId = router.currentRoute.value.query.id;
+  router.push({
+    path: '/tool',
+    query: currentId ? { id: currentId } : {}
+  });
+}
+
+// 保存地图状态
+function saveMapState() {
+  if (!props.worldData) {
+    console.warn('worldData is undefined');
+    return;
+  }
+  
+  if (!props.worldData.content) {
+    props.worldData.content = {};
+  }
+  if (!props.worldData.content.world_map) {
+    props.worldData.content.world_map = {};
+  }
+  
+  props.worldData.content.world_map.position = {
+    x: offsetX.value,
+    y: offsetY.value
+  };
+  props.worldData.content.world_map.scale = scale.value;
+  props.worldData.content.world_map.updatedAt = new Date().toISOString();
+  
+  emit('update:worldData', props.worldData);
+  emit('save');
+}
+
+// 修改重置视图函数
+function handleResetView() {
+  resetView();
+  saveMapState();
+}
+
+// 添加加载状态
+const isLoading = ref(true)
+const error = ref<string | null>(null)
+
+// 监听worldData变化
+watch(() => props.worldData, (newData) => {
+    console.log('worldData changed:', newData);
+    if (newData) {
+        isLoading.value = false
+        error.value = null
+        // 初始化地图数据
+        initMapData(newData)
+    } else {
+        error.value = '未找到世界数据'
+        isLoading.value = false
+    }
+}, { immediate: true })
+
+// 初始化地图数据
+const initMapData = (data: WorldData) => {
+    console.log('Initializing map data:', data);
+    try {
+        // 初始化地图状态
+        const { mapData, loadMapData } = useMapData(props, emit)
+        console.log('Current mapData:', mapData.value);
+        loadMapData()
+        console.log('After loadMapData:', mapData.value);
+        
+        // 初始化画布
+        const { initCanvas } = useMapCanvas(
+            isDarkMode,
+            offsetX,
+            offsetY,
+            scale,
+            mapData,
+            currentLocationId,
+            isDrawingConnection,
+            connectionStartId,
+            dragStartX,
+            dragStartY
+        )
+        initCanvas()
+        
+        // 初始化交互
+        const interactions = useMapInteractions(
+            canvasRef,
+            mapData,
+            isDragging,
+            dragStartX,
+            dragStartY,
+            offsetX,
+            offsetY,
+            scale,
+            isDrawingConnection,
+            connectionStartId,
+            currentLocationId,
+            locationNameInput,
+            locationDescInput,
+            isEditing,
+            activeTool,
+            mouseX,
+            mouseY,
+            drawMap
+        )
+        
+        // 将交互函数赋值给组件变量
+        handleMouseDown = interactions.handleMouseDown
+        handleMouseMove = interactions.handleMouseMove
+        handleMouseUp = interactions.handleMouseUp
+        handleClick = interactions.handleClick
+        handleKeyDown = interactions.handleKeyDown
+        handleWheel = interactions.handleWheel
+    } catch (e) {
+        error.value = '初始化地图数据失败'
+        console.error('Map initialization error:', e)
+    }
+}
+
 // 初始化
 onMounted(() => {
   initCanvas();
@@ -143,83 +253,91 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeyDown);
   window.removeEventListener('resize', handleResize);
 });
-
-// 监听地图数据变化
-watch(() => props.worldData, () => {
-  loadMapData();
-}, { deep: true });
 </script>
 
 <template>
   <div class="world-map-container" :class="{ 'dark-mode': isDarkMode }">
-    <div class="map-toolbar">
-      <div class="tool-group">
-        <button 
-          :class="['tool-btn', { active: activeTool === 'select' }]" 
-          @click="setActiveTool('select')"
-          title="选择工具"
-        >
-          <i class="fas fa-mouse-pointer"></i>
-        </button>
-        <button 
-          :class="['tool-btn', { active: activeTool === 'add' }]" 
-          @click="setActiveTool('add')"
-          title="添加位置"
-        >
-          <i class="fas fa-plus"></i>
-        </button>
-        <button 
-          :class="['tool-btn', { active: activeTool === 'connect' }]" 
-          @click="setActiveTool('connect')"
-          title="连接位置"
-        >
-          <i class="fas fa-project-diagram"></i>
-        </button>
-        <button 
-          :class="['tool-btn', { active: activeTool === 'delete' }]" 
-          @click="setActiveTool('delete')"
-          title="删除位置"
-        >
-          <i class="fas fa-trash"></i>
-        </button>
-      </div>
-      
-      <div class="coordinate-display" v-if="showCoordinates">
-        <div class="coordinate-label">{{ mouseX > 0 ? `${mouseX}°W` : `${Math.abs(mouseX)}°E` }}</div>
-        <div class="coordinate-label">{{ mouseY > 0 ? `${mouseY}°N` : `${Math.abs(mouseY)}°S` }}</div>
-        <div class="coordinate-label">缩放: {{ Math.round(scale * 100) }}%</div>
-        <button class="coord-toggle" @click="toggleCoordinates" title="隐藏坐标">
-          <i class="fas fa-eye-slash"></i>
-        </button>
-      </div>
-      
-      <div v-else class="coordinate-toggle-container">
-        <button class="coord-toggle" @click="toggleCoordinates" title="显示坐标">
-          <i class="fas fa-eye"></i>
-        </button>
-      </div>
-      
-      <div class="tool-group">
-        <button 
-          class="tool-btn theme-toggle" 
-          @click="toggleDarkMode" 
-          :title="isDarkMode ? '切换到亮色模式' : '切换到暗色模式'"
-        >
-          <i :class="['fas', isDarkMode ? 'fa-sun' : 'fa-moon']"></i>
-        </button>
-        <button class="tool-btn" @click="resetView" title="重置视图">
-          <i class="fas fa-sync"></i>
-        </button>
-        <button class="tool-btn" @click="fitWorldView" title="查看完整世界地图">
-          <i class="fas fa-globe"></i>
-        </button>
-        <button class="tool-btn" @click="saveMapData" title="保存地图">
-          <i class="fas fa-save"></i>
-        </button>
-      </div>
+    <div v-if="isLoading" class="loading">
+      <span>加载中...</span>
     </div>
-    
-    <div class="map-content">
+    <div v-else-if="error" class="error">
+      <span>{{ error }}</span>
+    </div>
+    <div v-else class="map-content">
+      <div class="map-toolbar">
+        <div class="tool-group">
+          <button 
+            class="tool-btn back-btn"
+            @click="goBack"
+            title="返回"
+          >
+            <i class="fas fa-arrow-left"></i>
+          </button>
+          <button 
+            :class="['tool-btn', { active: activeTool === 'select' }]" 
+            @click="setActiveTool('select')"
+            title="选择工具"
+          >
+            <i class="fas fa-mouse-pointer"></i>
+          </button>
+          <button 
+            :class="['tool-btn', { active: activeTool === 'add' }]" 
+            @click="setActiveTool('add')"
+            title="添加位置"
+          >
+            <i class="fas fa-plus"></i>
+          </button>
+          <button 
+            :class="['tool-btn', { active: activeTool === 'connect' }]" 
+            @click="setActiveTool('connect')"
+            title="连接位置"
+          >
+            <i class="fas fa-project-diagram"></i>
+          </button>
+          <button 
+            :class="['tool-btn', { active: activeTool === 'delete' }]" 
+            @click="setActiveTool('delete')"
+            title="删除位置"
+          >
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+        
+        <div class="coordinate-display" v-if="showCoordinates">
+          <div class="coordinate-label">{{ mouseX > 0 ? `${180 - mouseX}°W` : `${Math.abs(180 + mouseX)}°E` }}</div>
+          <div class="coordinate-label">{{ mouseY > 0 ? `${mouseY}°N` : `${Math.abs(mouseY)}°S` }}</div>
+          <div class="coordinate-label">缩放: {{ Math.round(scale * 100) }}%</div>
+          <button class="coord-toggle" @click="toggleCoordinates" title="隐藏坐标">
+            <i class="fas fa-eye-slash"></i>
+          </button>
+        </div>
+        
+        <div v-else class="coordinate-toggle-container">
+          <button class="coord-toggle" @click="toggleCoordinates" title="显示坐标">
+            <i class="fas fa-eye"></i>
+          </button>
+        </div>
+        
+        <div class="tool-group">
+          <button 
+            class="tool-btn theme-toggle" 
+            @click="toggleDarkMode" 
+            :title="isDarkMode ? '切换到亮色模式' : '切换到暗色模式'"
+          >
+            <i :class="['fas', isDarkMode ? 'fa-sun' : 'fa-moon']"></i>
+          </button>
+          <button class="tool-btn" @click="handleResetView" title="重置视图">
+            <i class="fas fa-sync"></i>
+          </button>
+          <button class="tool-btn" @click="fitWorldView" title="查看完整世界地图">
+            <i class="fas fa-globe"></i>
+          </button>
+          <button class="tool-btn" @click="saveMapState" title="保存地图">
+            <i class="fas fa-save"></i>
+          </button>
+        </div>
+      </div>
+      
       <canvas ref="canvasRef" :width="canvasWidth" :height="canvasHeight" class="map-canvas"
         @mousedown="handleMouseDown"
         @mousemove="handleMouseMove"
@@ -276,18 +394,6 @@ watch(() => props.worldData, () => {
         </div>
       </div>
     </div>
-    
-    <div class="map-info">
-      <div class="form-group">
-        <label>地图名称</label>
-        <input type="text" v-model="mapData.name" />
-      </div>
-      
-      <div class="form-group">
-        <label>地图描述</label>
-        <textarea v-model="mapData.description" rows="2"></textarea>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -295,7 +401,7 @@ watch(() => props.worldData, () => {
 .world-map-container {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: 100vh;
   background-color: #ffffff;
   overflow: hidden;
   
@@ -399,7 +505,7 @@ watch(() => props.worldData, () => {
       gap: 5px;
     }
     
-    .tool-btn, .coord-toggle {
+    .tool-btn {
       display: flex;
       align-items: center;
       justify-content: center;
@@ -425,6 +531,16 @@ watch(() => props.worldData, () => {
       &.theme-toggle {
         &:hover {
           background-color: var(--bg-hover);
+        }
+      }
+
+      &.back-btn {
+        background-color: var(--error);
+        color: white;
+        border-color: var(--error);
+        
+        &:hover {
+          background-color: var(--error-dark);
         }
       }
     }
@@ -613,41 +729,19 @@ watch(() => props.worldData, () => {
       }
     }
   }
-  
-  .map-info {
-    padding: 10px;
-    background-color: var(--bg-secondary);
-    border-top: 1px solid var(--border-color);
-    
-    .form-group {
-      margin-bottom: 10px;
-      
-      &:last-child {
-        margin-bottom: 0;
-      }
-      
-      label {
-        display: block;
-        margin-bottom: 5px;
-        color: var(--text-secondary);
-        font-size: 0.9rem;
-      }
-      
-      input, textarea {
-        width: 100%;
-        padding: 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 4px;
-        background-color: var(--bg-tertiary);
-        color: var(--text-primary);
-        
-        &:focus {
-          border-color: var(--accent-primary);
-          outline: none;
-        }
-      }
-    }
-  }
+}
+
+.loading, .error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.2em;
+  color: var(--text-color);
+}
+
+.error {
+  color: var(--error-color);
 }
 
 // 添加CSS变量定义
@@ -662,6 +756,8 @@ watch(() => props.worldData, () => {
   --accent-primary: #1976d2;
   --accent-secondary: #1565c0;
   --accent-tertiary: #64b5f6;
+  --error: #f44336;
+  --error-dark: #d32f2f;
 }
 
 // 为暗黑模式添加CSS变量
@@ -677,4 +773,4 @@ watch(() => props.worldData, () => {
   --accent-secondary: #0055aa;
   --accent-tertiary: #3388cc;
 }
-</style>
+</style> 

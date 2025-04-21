@@ -70,7 +70,13 @@ function selectTitle(title: string) {
 // 返回主页面
 function goBack() {
   emit('back');
-  router.push('/tool');
+  // 获取当前的 id 参数
+  const currentId = route.query.id;
+  // 返回到工具页面，并保留 id 参数
+  router.push({
+    path: '/tool',
+    query: currentId ? { id: currentId } : {}
+  });
 }
 
 // 计算缩进空间
@@ -132,21 +138,6 @@ function getTitleDisplayText(title: string, level: number) {
             暂无标题
           </div>
         </div>
-      </div>
-      
-      <div 
-        class="nav-item" 
-        :class="{ active: route.path === '/editor/map' }"
-        @click="router.push('/editor/map')"
-      >
-        地图
-      </div>
-      <div 
-        class="nav-item" 
-        :class="{ active: route.path === '/editor/characters' }"
-        @click="router.push('/editor/characters')"
-      >
-        人物
       </div>
     </div>
     

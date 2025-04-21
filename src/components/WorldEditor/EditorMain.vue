@@ -2,7 +2,11 @@
 import { defineProps, defineEmits, ref, watch, onMounted, onBeforeUnmount, computed } from 'vue';
 import type { WorldData } from '../../electron';
 import ProseMirrorEditor from './ProseMirrorEditor.vue';
-import WorldMapView from '../WorldMap/WorldMapView.vue';
+import { useRouter, useRoute } from 'vue-router';
+
+// 获取路由实例
+const router = useRouter();
+const route = useRoute();
 
 // 定义接收的属性
 const props = defineProps<{
@@ -159,6 +163,13 @@ function saveContent() {
 // 返回主页面
 function goBack() {
   emit('back');
+  // 获取当前的 id 参数
+  const currentId = route.query.id;
+  // 返回到工具页面，并保留 id 参数
+  router.push({
+    path: '/tool',
+    query: currentId ? { id: currentId } : {}
+  });
 }
 
 // 是否显示世界观文本编辑器
@@ -236,19 +247,6 @@ function handleWorldDataUpdate(updatedWorldData: WorldData) {
             @change="handleContentChange"
             @save="saveContent"
           />
-          
-          <!-- 地图编辑器 -->
-          <WorldMapView
-            v-else-if="isMapContent"
-            :worldData="worldData"
-            @updateWorldData="handleWorldDataUpdate"
-            @save="saveContent"
-          />
-          
-          <!-- 人物编辑器 (待实现) -->
-          <div v-else-if="isCharacterContent" class="character-editor-placeholder">
-            <p>人物编辑器开发中...</p>
-          </div>
         </div>
       </div>
       

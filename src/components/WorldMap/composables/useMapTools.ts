@@ -15,6 +15,7 @@ export function useMapTools(
 ) {
   // 初始化地图位置
   function initMapPosition() {
+    console.log('调用11');
     if (!canvasRef.value) return;
     
     const rect = canvasRef.value.getBoundingClientRect();
