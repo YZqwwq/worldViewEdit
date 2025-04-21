@@ -1,9 +1,9 @@
 {
   "id": "1744946932967",
   "name": "1",
-  "createdAt": "2025-04-18T03:28:52.967Z",
-  "updatedAt": "2025-04-20T16:57:50.106Z",
   "description": "",
+  "createdAt": "2025-04-18T03:28:52.967Z",
+  "updatedAt": "2025-04-21T19:11:52.010Z",
   "content": {
     "main_setting_of_the_worldview": {
       "updatedAt": "2025-04-20T16:57:50.106Z",
@@ -12,16 +12,44 @@
       }
     },
     "world_map": {
-      "updatedAt": "2025-04-20T16:57:50.106Z",
+      "name": "",
+      "description": "",
+      "locations": [
+        {
+          "id": "loc1",
+          "name": "地点A",
+          "x": 100,
+          "y": 150,
+          "connections": [
+            "loc2"
+          ]
+        },
+        {
+          "id": "loc2",
+          "name": "地点B",
+          "x": 300,
+          "y": 200,
+          "connections": [
+            "loc1"
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "id": "conn1",
+          "start": "loc1",
+          "end": "loc2"
+        }
+      ],
       "position": {
-        "offsetX": 0,
-        "offsetY": 0
+        "offsetX": -486.79998779296875,
+        "offsetY": -221.19998168945312
       },
-      "scale": 1,
-      "rotation": 0
+      "scale": 0.09886666870117188
     },
     "character": {
       "ch1": {
+        "id": "ch1",
         "updatedAt": "2025-04-20T16:57:50.106Z",
         "descriptors": {
           "name": "",
@@ -37,14 +65,16 @@
           "enemies": [],
           "allies": []
         }
-      } 
+      }
     },
     "factions": {
       "f1": {
+        "id": "f1",
+        "updatedAt": "2025-04-21T17:19:54.095Z",
         "name": "",
         "description": "",
         "members": []
       }
-    } 
+    }
   }
 }

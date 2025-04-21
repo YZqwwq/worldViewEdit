@@ -2,20 +2,74 @@
 import { ref, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useWorldStore } from '../stores/worldStore';
+import { useMapStore } from '../stores/mapStore';
+import { useCharacterStore } from '../stores/characterStore';
+import { useFactionsStore } from '../stores/factionsStore';
 
-// 使用Pinia store
+// 使用 Pinia stores
 const worldStore = useWorldStore();
-
-// 获取路由器实例和当前路由
+const mapStore = useMapStore();
 const router = useRouter();
 const route = useRoute();
 
-// 在组件挂载时获取世界观ID
-onMounted(() => {
-  // 从URL参数中获取世界观ID
+// 加载状态和错误状态
+const isLoading = ref(false);
+const error = ref<string | null>(null);
+
+// 在组件挂载时加载数据
+onMounted(async () => {
   const id = route.query.id as string;
-  if (id) {
-    worldStore.loadWorldData(id);
+  if (!id) {
+    error.value = '未找到世界ID';
+    return;
+  }
+
+  try {
+    isLoading.value = true;
+    await worldStore.loadWorldData(id);
+    console.log('worldStore-workTool',JSON.stringify(worldStore.worldData?.content));
+    
+    // 确保地图数据已加载
+    if (worldStore.worldData?.content?.world_map) {
+      const mapData = worldStore.worldData.content.world_map;
+      mapStore.$patch({
+        mapData: {
+          name: mapData.name,
+          description: mapData.description,
+          locations: mapData.locations,
+          connections: mapData.connections
+        },
+        position: {
+          offsetX: mapData.position.offsetX,
+          offsetY: mapData.position.offsetY
+        },
+        scale: mapData.scale
+      });
+      console.log('mapStore-workTool', mapStore.position.offsetX);
+      console.log('mapStore-workTool', mapStore.position.offsetY);
+      console.log('mapStore-workTool', mapStore.scale);
+    }
+    
+    // 确保角色数据已加载
+    if (worldStore.worldData?.content?.character) {
+      const characterStore = useCharacterStore();
+      Object.entries(worldStore.worldData.content.character).forEach(([id, char]) => {
+        characterStore.addCharacter(id, char as any);
+      });
+    }
+    
+    // 确保阵营数据已加载
+    if (worldStore.worldData?.content?.factions) {
+      const factionsStore = useFactionsStore();
+      Object.entries(worldStore.worldData.content.factions).forEach(([id, faction]) => {
+        factionsStore.addFaction(id, faction as any);
+      });
+    }
+    
+    isLoading.value = false;
+  } catch (e) {
+    error.value = '加载世界数据失败：' + (e instanceof Error ? e.message : String(e));
+    isLoading.value = false;
   }
 });
 
@@ -26,32 +80,38 @@ function goBack() {
 
 // 跳转到地图编辑器
 function goToMap() {
-  if (worldStore.$state.id) {
-    router.push({
-      path: '/map',
-      query: { id: worldStore.$state.id }
-    });
+  if (!worldStore.$state.id) {
+    error.value = '请先选择一个世界';
+    return;
   }
+  router.push({
+    path: '/map',
+    query: { id: worldStore.$state.id }
+  });
 }
 
 // 跳转到角色编辑器
 function goToCharacters() {
-  if (worldStore.$state.id) {
-    router.push({
-      path: '/characters',
-      query: { id: worldStore.$state.id }
-    });
+  if (!worldStore.$state.id) {
+    error.value = '请先选择一个世界';
+    return;
   }
+  router.push({
+    path: '/characters',
+    query: { id: worldStore.$state.id }
+  });
 }
 
 // 跳转到世界观编辑器
 function goToWorldView() {
-  if (worldStore.$state.id) {
-    router.push({
-      path: '/editor/world',
-      query: { id: worldStore.$state.id }
-    });
+  if (!worldStore.$state.id) {
+    error.value = '请先选择一个世界';
+    return;
   }
+  router.push({
+    path: '/editor/world',
+    query: { id: worldStore.$state.id }
+  });
 }
 </script>
 
@@ -62,7 +122,17 @@ function goToWorldView() {
       <button class="back-btn" @click="goBack">返回</button>
     </div>
     
-    <div class="tool-buttons">
+    <div v-if="isLoading" class="loading-state">
+      <i class="fas fa-spinner fa-spin"></i>
+      <span>加载中...</span>
+    </div>
+    
+    <div v-else-if="error" class="error-state">
+      <i class="fas fa-exclamation-circle"></i>
+      <span>{{ error }}</span>
+    </div>
+    
+    <div v-else class="tool-buttons">
       <button class="tool-btn" @click="goToWorldView">
         <i class="fas fa-globe"></i>
         <span>世界观编辑器</span>
@@ -108,6 +178,29 @@ function goToWorldView() {
         background-color: var(--error-dark);
       }
     }
+  }
+  
+  .loading-state,
+  .error-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    text-align: center;
+    
+    i {
+      font-size: 32px;
+      margin-bottom: 16px;
+    }
+    
+    span {
+      font-size: 16px;
+    }
+  }
+  
+  .error-state {
+    color: var(--error);
   }
   
   .tool-buttons {

@@ -10,7 +10,7 @@ export function useMapTools(
   offsetY: Ref<number>,
   scale: Ref<number>,
   drawMap: () => void,
-  minScale: number = 0.03,
+  minScale: number = 0.08,
   maxScale: number = 5.0
 ) {
   // 初始化地图位置
@@ -35,10 +35,10 @@ export function useMapTools(
     
     if (rect.height > mapHeightInPixels) {
       // 地图高度小于画布高度，垂直居中
-      offsetY.value = (rect.height - mapHeightInPixels) / 2;
+      offsetY.value = (rect.height - mapHeightInPixels) / 2 - 50;
     } else {
       // 地图高度大于画布高度，显示中心区域
-      offsetY.value = -(mapHeightInPixels - rect.height) / 2;
+      offsetY.value = -(mapHeightInPixels - rect.height) / 2 - 50;
     }
     
     // 重绘地图
@@ -77,7 +77,7 @@ export function useMapTools(
   // 新增：查看完整世界地图的功能
   function fitWorldView() {
     // 设置为0.2的缩放值，对应每格30°的网格线
-    scale.value = 0.2;
+    scale.value = 0.1;
     
     // 重置地图位置（居中显示）
     initMapPosition();

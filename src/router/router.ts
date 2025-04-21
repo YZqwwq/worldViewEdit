@@ -1,6 +1,5 @@
 // src/router.js 或 src/router.ts
 import { createRouter, createMemoryHistory } from 'vue-router';
-import type { RouteLocationNormalized } from 'vue-router';
 import ShowPanel from '../view/ShowPanel.vue';
 import WorldEditorView from '../view/WorldEditorView.vue';
 import WorldMapView from '../view/WorldMapView.vue';
@@ -33,13 +32,7 @@ const routes = [
     {
         path: '/map',
         name: 'WorldMap',
-        component: WorldMapView,
-        props: (route: RouteLocationNormalized) => {
-            console.log('Route query:', route.query);
-            const worldData = route.query.worldData ? JSON.parse(route.query.worldData as string) : undefined;
-            console.log('Parsed worldData:', worldData);
-            return { worldData };
-        }
+        component: WorldMapView
     },
     {
         path: '/characters',

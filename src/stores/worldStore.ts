@@ -136,17 +136,33 @@ export const useWorldStore = defineStore('world', {
           const characterStore = useCharacterStore();
           const factionsStore = useFactionsStore();
 
+          // 创建纯 JavaScript 对象，确保所有数据都是可序列化的
           const data = {
             id: this.id,
             name: this.name,
             description: this.description,
             createdAt: this.createdAt,
-            updatedAt: this.updatedAt,
+            updatedAt: new Date().toISOString(),
             content: {
-              main_setting_of_the_worldview: this.content.main_setting_of_the_worldview,
-              world_map: mapStore.$state,
-              character: characterStore.characters,
-              factions: factionsStore.factions
+              main_setting_of_the_worldview: {
+                updatedAt: this.content.main_setting_of_the_worldview.updatedAt,
+                content: {
+                  text: this.content.main_setting_of_the_worldview.content.text
+                }
+              },
+              world_map: {
+                name: mapStore.mapData.name || '',
+                description: mapStore.mapData.description || '',
+                locations: JSON.parse(JSON.stringify(mapStore.mapData.locations || [])),
+                connections: JSON.parse(JSON.stringify(mapStore.mapData.connections || [])),
+                position: {
+                  offsetX: mapStore.position.offsetX,
+                  offsetY: mapStore.position.offsetY
+                },
+                scale: mapStore.scale
+              },
+              character: JSON.parse(JSON.stringify(characterStore.characters || {})),
+              factions: JSON.parse(JSON.stringify(factionsStore.factions || {}))
             }
           };
 

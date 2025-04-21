@@ -14,11 +14,6 @@ const router = useRouter();
 const mapStore = useMapStore();
 const worldStore = useWorldStore();
 
-// 定义Props
-const props = defineProps<{
-  // 移除worldId，因为我们现在使用store
-}>();
-
 // 定义事件
 const emit = defineEmits<{
   (e: 'update:worldData', data: WorldData): void;
@@ -49,7 +44,6 @@ const {
   setActiveTool,
   toggleCoordinates,
   toggleDarkMode,
-  resetView
 } = useMapState(mapStore);
 
 // 引入地图状态和数据管理
@@ -88,7 +82,7 @@ const {
 );
 
 // 引入地图工具栏功能
-const { initMapPosition, fitWorldView } = useMapTools(
+const { resetView,fitWorldView } = useMapTools(
   canvasRef, 
   offsetX, 
   offsetY, 
@@ -131,16 +125,12 @@ function goBack() {
 
 // 保存地图状态
 function saveMapState() {
-  if (!worldStore.$state.id) {
-    console.warn('worldId is undefined');
-    return;
-  }
   
   // 更新地图数据
   mapStore.$patch({
     position: {
-      x: offsetX.value,
-      y: offsetY.value
+      offsetX: offsetX.value,
+      offsetY: offsetY.value
     },
     scale: scale.value
   });
@@ -158,25 +148,6 @@ function handleResetView() {
 // 添加加载状态
 const isLoading = ref(true);
 const error = ref<string | null>(null);
-
-// 监听store中的worldId变化
-watch(() => worldStore.$state.id, (newId) => {
-  if (newId) {
-    isLoading.value = true;
-    error.value = null;
-    worldStore.loadWorldData(newId).then(() => {
-      isLoading.value = false;
-      initMapData();
-    }).catch((e) => {
-      error.value = '加载地图数据失败';
-      console.error('Map initialization error:', e);
-      isLoading.value = false;
-    });
-  } else {
-    error.value = '未找到世界ID';
-    isLoading.value = false;
-  }
-}, { immediate: true });
 
 // 声明交互处理函数的类型
 interface MapInteractions {
@@ -265,6 +236,28 @@ const initMapData = async () => {
   }
 };
 
+// 监听store中的worldId变化非必须
+watch(() => worldStore.$state.id, (newId) => {
+  if (newId) {
+    isLoading.value = true;
+    error.value = null;
+    isLoading.value = false;
+    nextTick(() => {
+      initMapData();
+    });
+  } else {
+    error.value = '未找到世界ID';
+    isLoading.value = false;
+  }
+}, { immediate: true });
+
+// 监听数据变化
+watch(() => mapStore.mapData, (newData) => {
+  if (newData && canvasRef.value && ctxRef.value) {
+    drawMap();
+  }
+}, { deep: true });
+
 // 初始化
 onMounted(async () => {
   try {
@@ -279,11 +272,8 @@ onMounted(async () => {
     // 监听窗口大小变化
     window.addEventListener('resize', handleResize);
     
-    // 如果已有worldId，等待数据加载完成后初始化
-    if (worldStore.$state.id) {
-      await worldStore.loadWorldData(worldStore.$state.id);
-      await initMapData();
-    }
+    // 初始化地图数据
+    await initMapData();
     
     // 处理窗口大小变化
     handleResize();
@@ -294,14 +284,6 @@ onMounted(async () => {
     error.value = '初始化失败：' + (e instanceof Error ? e.message : String(e));
   }
 });
-
-// 监听数据变化
-watch(() => mapStore.mapData, (newData) => {
-  console.log('地图数据更新:', newData);
-  if (newData && canvasRef.value && ctxRef.value) {
-    drawMap();
-  }
-}, { deep: true });
 
 // 清理
 onBeforeUnmount(() => {
@@ -361,7 +343,7 @@ onBeforeUnmount(() => {
         <div class="coordinate-display" v-if="showCoordinates">
           <div class="coordinate-label">{{ mouseX > 0 ? `${180 - mouseX}°W` : `${Math.abs(180 + mouseX)}°E` }}</div>
           <div class="coordinate-label">{{ mouseY > 0 ? `${mouseY}°N` : `${Math.abs(mouseY)}°S` }}</div>
-          <div class="coordinate-label">缩放: {{ Math.round(scale * 100) }}%</div>
+          <div class="coordinate-label">缩放: {{ Math.round(scale * 100)}}%</div>
           <button class="coord-toggle" @click="toggleCoordinates" title="隐藏坐标">
             <i class="fas fa-eye-slash"></i>
           </button>

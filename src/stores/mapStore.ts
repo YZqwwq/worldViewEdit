@@ -4,8 +4,8 @@ import type { MapData } from '../types/map';
 export interface MapState {
   mapData: MapData;
   position: {
-    x: number;
-    y: number;
+    offsetX: number;
+    offsetY: number;
   };
   scale: number;
 }
@@ -19,8 +19,8 @@ export const useMapStore = defineStore('map', {
       connections: []
     },
     position: {
-      x: 0,
-      y: 0
+      offsetX: 0,
+      offsetY: 0
     },
     scale: 1
   }),
@@ -30,8 +30,8 @@ export const useMapStore = defineStore('map', {
       this.mapData = data;
     },
     
-    setPosition(x: number, y: number) {
-      this.position = { x, y };
+    setPosition(offsetX: number, offsetY: number) {
+      this.position = { offsetX, offsetY };
     },
     
     setScale(scale: number) {

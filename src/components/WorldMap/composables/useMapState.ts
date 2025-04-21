@@ -16,12 +16,12 @@ export function useMapState(mapStore: Store<'map', MapState>, drawMap?: () => vo
   const dragStartY = ref(0);
   
   // 从mapStore中读取保存的位置和缩放比例
-  const offsetX = ref(mapStore.position.x);
-  const offsetY = ref(mapStore.position.y);
+  const offsetX = ref(mapStore.position.offsetX);
+  const offsetY = ref(mapStore.position.offsetY);
   const scale = ref(mapStore.scale);
   
   // 缩放限制
-  const minScale = ref(0.2);
+  const minScale = ref(0.08);
   const maxScale = ref(5);
   
   // 工具栏状态
@@ -56,17 +56,6 @@ export function useMapState(mapStore: Store<'map', MapState>, drawMap?: () => vo
     }
   }
   
-  // 重置地图视图到初始位置（赤道与本初子午线交点）
-  function resetView() {
-    scale.value = 0.5; // 设置为50%缩放
-    offsetX.value = 0;
-    offsetY.value = 0;
-    // 如果提供了drawMap函数，则调用它重绘地图
-    if (drawMap) {
-      drawMap();
-    }
-  }
-  
   // 切换坐标显示
   function toggleCoordinates() {
     showCoordinates.value = !showCoordinates.value;
@@ -97,6 +86,5 @@ export function useMapState(mapStore: Store<'map', MapState>, drawMap?: () => vo
     setActiveTool,
     toggleCoordinates,
     toggleDarkMode,
-    resetView
   };
 } 

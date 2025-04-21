@@ -49,7 +49,11 @@ export function useMapRenderer(
     const ctx = ctxRef.value;
     const canvas = canvasRef.value;
     const gridSize = 30;
-    
+    console.log('ctx',ctx);
+    console.log('canvas',canvas); 
+    console.log('offsetX',offsetX.value);
+    console.log('offsetY',offsetY.value);
+    console.log('scale',scale.value); 
     try {
       // 清空画布
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -107,8 +111,8 @@ export function useMapRenderer(
       ctx.scale(scale.value, scale.value);
       
       // 绘制基本地图内容
-      drawConnections(ctx); // 先绘制连接线
-      drawLocations(ctx);   // 再绘制位置节点
+      // drawConnections(ctx); // 先绘制连接线
+      // drawLocations(ctx);   // 再绘制位置节点
       
       // 恢复原始绘图状态
       ctx.restore();
@@ -473,9 +477,9 @@ export function useMapRenderer(
         let labelText = `${longitude}°`;
         
         if (longitude === 0) {
-          labelText = "本初子午线";
+          labelText = "0";
         } else if (longitude === 180 || longitude === -180) {
-          labelText = "国际日期变更线";
+          labelText = "";
         } else if (longitude > 0) {
           labelText = `${longitude}°E`;
         } else if (longitude < 0) {

@@ -39,7 +39,7 @@ export function useMapCanvas(
     
     const canvas = canvasRef.value;
     ctxRef.value = canvas.getContext('2d');
-    
+    console.log('ctxRef',ctxRef.value);
     // 初次渲染
     drawMap();
   }
