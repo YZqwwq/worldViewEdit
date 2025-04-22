@@ -92,6 +92,32 @@ const { resetView,fitWorldView } = useMapTools(
   maxScale.value
 );
 
+// 添加地图绘制相关的数据
+const drawingTool = ref('land');
+const drawingWidth = ref(2);
+const drawingMode = ref('pen');
+
+// 计算编辑器标题
+const getEditorTitle = computed(() => {
+  switch (activeTool.value) {
+    case 'add':
+      return '位置详情';
+    case 'draw':
+      return '地图绘制';
+    default:
+      return '';
+  }
+});
+
+// 开始绘制方法
+const startDrawing = () => {
+  // 这里添加开始绘制的逻辑
+  console.log('开始绘制', {
+    tool: drawingTool.value,
+    width: drawingWidth.value
+  });
+};
+
 // 获取实际坐标值
 const currentLocationCoordinates = computed(() => {
   if (!currentLocation.value) return { longitude: 0, latitude: 0 };
@@ -338,6 +364,13 @@ onBeforeUnmount(() => {
           >
             <i class="fas fa-trash"></i>
           </button>
+          <button 
+            :class="['tool-btn', { active: activeTool === 'draw' }]" 
+            @click="setActiveTool('draw')"
+            title="地图绘制"
+          >
+            <i class="fas fa-paint-brush"></i>
+          </button>
         </div>
         
         <div class="coordinate-display" v-if="showCoordinates">
@@ -383,40 +416,100 @@ onBeforeUnmount(() => {
         @wheel="handleWheel"
       ></canvas>
       
-      <div v-if="isEditing" class="location-editor">
+      <div v-if="activeTool && ['add', 'draw'].includes(activeTool)" class="location-editor">
         <div class="editor-header">
-          <h3>位置详情</h3>
-          <button class="close-btn" @click="isEditing = false">
+          <h3>{{ getEditorTitle }}</h3>
+          <button class="close-btn" @click="setActiveTool('select')">
             <i class="fas fa-times"></i>
           </button>
         </div>
         
         <div class="editor-content">
-          <div class="form-group">
-            <label>名称</label>
-            <input type="text" v-model="locationNameInput" />
-          </div>
-          
-          <div class="form-group">
-            <label>描述</label>
-            <textarea v-model="locationDescInput" rows="4"></textarea>
-          </div>
-          
-          <div class="form-group">
-            <label>坐标</label>
-            <div class="coord-inputs">
-              <div class="coord-input">
-                <span>经度:</span>
-                <span>{{ formattedLongitude }}</span>
-              </div>
-              <div class="coord-input">
-                <span>纬度:</span>
-                <span>{{ formattedLatitude }}</span>
+          <template v-if="activeTool === 'add'">
+            <div class="form-group">
+              <label>名称</label>
+              <input type="text" v-model="locationNameInput" />
+            </div>
+            
+            <div class="form-group">
+              <label>描述</label>
+              <textarea v-model="locationDescInput" rows="4"></textarea>
+            </div>
+            
+            <div class="form-group">
+              <label>坐标</label>
+              <div class="coord-inputs">
+                <div class="coord-input">
+                  <span>经度:</span>
+                  <span>{{ formattedLongitude }}</span>
+                </div>
+                <div class="coord-input">
+                  <span>纬度:</span>
+                  <span>{{ formattedLatitude }}</span>
+                </div>
               </div>
             </div>
-          </div>
+            
+            <button class="save-btn" @click="saveLocationDetails">保存</button>
+          </template>
           
-          <button class="save-btn" @click="saveLocationDetails">保存</button>
+          <template v-else-if="activeTool === 'draw'">
+            <div class="form-group">
+              <label>地形类型</label>
+              <select v-model="drawingTool" class="terrain-select">
+                <option value="land">陆地</option>
+                <option value="ocean">海洋</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label>绘图工具</label>
+              <div class="drawing-tools">
+                <button 
+                  :class="['tool-option', { active: drawingMode === 'pen' }]"
+                  @click="drawingMode = 'pen'"
+                  title="画笔"
+                >
+                  <i class="fas fa-pen"></i>
+                </button>
+                <button 
+                  :class="['tool-option', { active: drawingMode === 'eraser' }]"
+                  @click="drawingMode = 'eraser'"
+                  title="橡皮擦"
+                >
+                  <i class="fas fa-eraser"></i>
+                </button>
+                <button 
+                  :class="['tool-option', { active: drawingMode === 'fill' }]"
+                  @click="drawingMode = 'fill'"
+                  title="填充"
+                >
+                  <i class="fas fa-fill-drip"></i>
+                </button>
+                <button 
+                  :class="['tool-option', { active: drawingMode === 'select' }]"
+                  @click="drawingMode = 'select'"
+                  title="选区"
+                >
+                  <i class="fas fa-vector-square"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>线条宽度</label>
+              <div class="width-control">
+                <input 
+                  type="range" 
+                  v-model="drawingWidth" 
+                  min="1" 
+                  max="10" 
+                  class="width-slider"
+                />
+                <span class="width-value">{{ drawingWidth }}px</span>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
       
@@ -809,5 +902,84 @@ onBeforeUnmount(() => {
   --accent-primary: #0066cc;
   --accent-secondary: #0055aa;
   --accent-tertiary: #3388cc;
+}
+
+.drawing-tools {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+
+  .tool-option {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover {
+      background-color: var(--bg-hover);
+    }
+
+    &.active {
+      background-color: var(--accent-primary);
+      color: white;
+      border-color: var(--accent-primary);
+    }
+
+    i {
+      font-size: 1.2em;
+    }
+  }
+}
+
+.terrain-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+  
+  &:focus {
+    border-color: var(--accent-primary);
+    outline: none;
+  }
+}
+
+.width-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+
+  .width-slider {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background-color: var(--border-color);
+    
+    &::-webkit-slider-thumb {
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background-color: var(--accent-primary);
+      cursor: pointer;
+    }
+  }
+
+  .width-value {
+    min-width: 40px;
+    text-align: right;
+    font-family: monospace;
+    color: var(--text-secondary);
+  }
 }
 </style> 
