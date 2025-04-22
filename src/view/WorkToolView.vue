@@ -27,7 +27,6 @@ onMounted(async () => {
   try {
     isLoading.value = true;
     await worldStore.loadWorldData(id);
-    console.log('worldStore-workTool',JSON.stringify(worldStore.worldData?.content));
     
     // 确保地图数据已加载
     if (worldStore.worldData?.content?.world_map) {
@@ -45,9 +44,6 @@ onMounted(async () => {
         },
         scale: mapData.scale
       });
-      console.log('mapStore-workTool', mapStore.position.offsetX);
-      console.log('mapStore-workTool', mapStore.position.offsetY);
-      console.log('mapStore-workTool', mapStore.scale);
     }
     
     // 确保角色数据已加载
