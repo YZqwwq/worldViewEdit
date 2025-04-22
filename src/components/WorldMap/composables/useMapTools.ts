@@ -47,8 +47,17 @@ export function useMapTools(
   
   // 重置视图函数
   function resetView() {
-    // 动态计算合适的缩放值，确保能看到完整地图
-    if (canvasRef.value) {
+    // 设置为0.2的缩放值，对应每格30°的网格线
+    scale.value = 0.2;
+   
+    // 重置地图位置
+    initMapPosition();
+  }
+  
+  // 新增：查看完整世界地图的功能
+  function fitWorldView() {
+     // 动态计算合适的缩放值，确保能看到完整地图
+     if (canvasRef.value) {
       const rect = canvasRef.value.getBoundingClientRect();
       const gridSize = 30;
       
@@ -70,14 +79,6 @@ export function useMapTools(
       scale.value = 0.06;
     }
     
-    // 重置地图位置
-    initMapPosition();
-  }
-  
-  // 新增：查看完整世界地图的功能
-  function fitWorldView() {
-    // 设置为0.2的缩放值，对应每格30°的网格线
-    scale.value = 0.1;
     
     // 重置地图位置（居中显示）
     initMapPosition();

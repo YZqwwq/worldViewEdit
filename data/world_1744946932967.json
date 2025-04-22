@@ -3,7 +3,7 @@
   "name": "1",
   "description": "",
   "createdAt": "2025-04-18T03:28:52.967Z",
-  "updatedAt": "2025-04-21T19:11:52.010Z",
+  "updatedAt": "2025-04-22T04:17:27.567Z",
   "content": {
     "main_setting_of_the_worldview": {
       "updatedAt": "2025-04-20T16:57:50.106Z",
@@ -42,8 +42,8 @@
         }
       ],
       "position": {
-        "offsetX": -486.79998779296875,
-        "offsetY": -221.19998168945312
+        "offsetX": 59.32000122070315,
+        "offsetY": 51.860012817382824
       },
       "scale": 0.09886666870117188
     },

@@ -16,8 +16,8 @@ export const MAP_BORDER_DARK = 'rgba(255, 255, 255, 0.3)';
 export const MAP_BORDER_LIGHT = 'rgba(0, 0, 0, 0.5)';
 
 // 网格线 - 所有经纬线使用相同的灰色
-export const GRID_LINE_DARK = 'rgba(100, 100, 100, 0.2)';
-export const GRID_LINE_LIGHT = 'rgba(150, 150, 150, 0.2)';
+export const GRID_LINE_DARK = 'rgba(112, 112, 112, 0.2)';
+export const GRID_LINE_LIGHT = 'rgba(70, 70, 70, 0.2)';
 
 // 重要线条 - 赤道与本初子午线也使用相同的灰色，不再使用红色
 export const MAIN_LINE_DARK = 'rgba(100, 100, 100, 0.4)';

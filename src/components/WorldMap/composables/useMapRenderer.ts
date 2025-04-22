@@ -156,14 +156,13 @@ export function useMapRenderer(
     let gridInterval = 1; // 默认每1度绘制一条线
     
     // 自适应网格间隔
-    if (scale.value < 0.03) gridInterval = 90; // 极小比例，每90度一条线
-    else if (scale.value < 0.05) gridInterval = 60; // 极小比例，每60度一条线
-    else if (scale.value < 0.1) gridInterval = 45; // 非常小的比例，每45度一条线
-    else if (scale.value < 0.2) gridInterval = 30; // 很小的比例，每30度一条线
-    else if (scale.value < 0.4) gridInterval = 15; // 小比例，每15度一条线
-    else if (scale.value < 0.8) gridInterval = 10; // 中等比例，每10度一条线
-    else if (scale.value < 1.2) gridInterval = 5; // 一般比例，每5度一条线
-    else if (scale.value < 2) gridInterval = 2; // 较大比例，每2度一条线
+    if (scale.value < 0.1) gridInterval = 9; // 极小比例，每45度一条线
+    else if (scale.value < 0.2) gridInterval = 6; // 很小的比例，每10度一条线
+    else if (scale.value < 0.4) gridInterval = 3; // 小比例，每5度一条线
+    else if (scale.value < 0.8) gridInterval = 1.5; // 中等比例，每2度一条线
+    else if (scale.value < 1.2) gridInterval = 1; // 一般比例，每1度一条线
+    else if (scale.value < 2) gridInterval = 0.5; // 较大比例，每0.5度一条线
+    else gridInterval = 0.25; // 最大比例，每0.25度一条线
     
     // 计算间隔后的网格大小
     const intervalScaledGridSize = gridInterval * scaledGridSize;
@@ -193,19 +192,6 @@ export function useMapRenderer(
         // 确保线条不超出地图边界
         ctx.moveTo(x, mapTop);
         ctx.lineTo(x, mapBottom);
-        
-        // 对于重要的经度线，使用更粗的灰色线（不再是红色）
-        if (longitude === 0 || longitude === 180 || longitude === -180) {
-          ctx.strokeStyle = mainLineColor;
-          
-          // 重要线条也遵循同样的粗细规则：缩小时粗，放大时细
-          ctx.lineWidth = scale.value < 0.2 ? 1.5 : 0.8;
-          ctx.stroke();
-          
-          ctx.beginPath();
-          ctx.strokeStyle = gridColor;
-          ctx.lineWidth = scale.value < 0.2 ? 0.8 : 0.5;
-        }
       }
     }
     
@@ -223,19 +209,6 @@ export function useMapRenderer(
         // 确保线条不超出地图边界
         ctx.moveTo(mapLeft, y);
         ctx.lineTo(mapRight, y);
-        
-        // 对于赤道，使用更粗的灰色线（不再是红色）
-        if (latitude === 0) {
-          ctx.strokeStyle = mainLineColor;
-          
-          // 重要线条也遵循同样的粗细规则：缩小时粗，放大时细
-          ctx.lineWidth = scale.value < 0.2 ? 1.5 : 0.8;
-          ctx.stroke();
-          
-          ctx.beginPath();
-          ctx.strokeStyle = gridColor;
-          ctx.lineWidth = scale.value < 0.2 ? 0.8 : 0.5;
-        }
       }
     }
     
@@ -414,11 +387,11 @@ export function useMapRenderer(
       ctx.fill();
       
       // 添加"世界地图"标题，但字体更小
-      ctx.font = `bold ${30 / scale.value}px Arial`;
-      ctx.fillStyle = isDarkMode.value ? WATERMARK_DARK : WATERMARK_LIGHT;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('世界地图', mapWidthInPixels / 2, mapHeightInPixels / 2);
+      // ctx.font = `bold ${30 / scale.value}px Arial`;
+      // ctx.fillStyle = isDarkMode.value ? WATERMARK_DARK : WATERMARK_LIGHT;
+      // ctx.textAlign = 'center';
+      // ctx.textBaseline = 'middle';
+      // ctx.fillText('世界地图', mapWidthInPixels / 2, mapHeightInPixels / 2);
     }
     
     ctx.restore();

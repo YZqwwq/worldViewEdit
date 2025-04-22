@@ -350,7 +350,7 @@ export function useMapInteractions(
     const newScale = delta > 0 ? scale.value * factor : scale.value / factor;
     
     // 使用传入的minScale值（ref）
-    if (newScale >= 0.07 && newScale <= 5) {
+    if (newScale >= 0.08 && newScale <= 5) {
       // 保存鼠标指针下的世界坐标
       const worldX = (mouseCanvasX - offsetX.value) / scale.value;
       const worldY = (mouseCanvasY - offsetY.value) / scale.value;
@@ -378,7 +378,7 @@ export function useMapInteractions(
           offsetY.value = Math.min(maxOffsetY, Math.max(minOffsetY, offsetY.value));
         } else {
           // 地图高度小于画布高度，将地图居中显示
-          offsetY.value = (canvasHeight - mapHeightInPixels) / 2;
+          offsetY.value = (canvasHeight - mapHeightInPixels) / 2 -50;
         }
         
         // 地图宽度大于画布宽度时，限制偏移范围
