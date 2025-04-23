@@ -209,6 +209,38 @@ export function useMapCanvas(
     renderAll();
   }
   
+  // 绘制激活状态的连接线（正在拖动创建的连接）
+  function drawActiveConnection(ctx: CanvasRenderingContext2D, offsetX: number) {
+    const startLocation = mapData.value.locations.find((loc: any) => loc.id === connectionStartId.value);
+    if (!startLocation || !canvasContainerRef.value) return;
+    
+    const rect = canvasContainerRef.value.getBoundingClientRect();
+    const gridSize = 30;
+    
+    // 计算鼠标的世界坐标
+    const mouseX = (dragStartX.value - rect.left - offsetX) / scale.value;
+    const mouseY = (dragStartY.value - rect.top - offsetY.value) / scale.value;
+    
+    // 确保坐标在有效范围内
+    const clampedMouseX = Math.max(0, Math.min(360 * gridSize, mouseX));
+    
+    ctx.save();
+    ctx.translate(offsetX, offsetY.value);
+    ctx.scale(scale.value, scale.value);
+    
+    // 绘制连接线
+    ctx.beginPath();
+    ctx.strokeStyle = 'var(--accent-secondary, #ff9800)';
+    ctx.lineWidth = 2 / scale.value;
+    
+    // 直接绘制从起点到鼠标位置的连接线
+    ctx.moveTo(startLocation.x, startLocation.y);
+    ctx.lineTo(clampedMouseX, mouseY);
+    
+    ctx.stroke();
+    ctx.restore();
+  }
+  
   // 统一的绘制函数
   function drawMap() {
     // 清除所有图层
@@ -216,6 +248,14 @@ export function useMapCanvas(
     
     // 渲染所有图层
     renderAll();
+    
+    // 如果正在绘制连接，绘制活动连接
+    if (isDrawingConnection.value && connectionStartId.value && canvasContainerRef.value) {
+      const connectionLayer = layers.value.get(LAYER_IDS.CONNECTION);
+      if (connectionLayer) {
+        drawActiveConnection(connectionLayer.ctx, offsetX.value);
+      }
+    }
   }
   
   // 显示/隐藏指定图层
