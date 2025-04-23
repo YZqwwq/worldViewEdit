@@ -2,6 +2,7 @@ import { ref, computed, watch } from 'vue';
 import type { Ref } from 'vue';
 import { LAYER_IDS } from './useMapCanvas';
 import { getMapRect } from './useLayerFactory';
+import type { Layer } from './useLayerManager';
 
 /**
  * 地图交互管理器
@@ -26,7 +27,7 @@ export function useMapInteractions(
   mouseX: Ref<number>,
   mouseY: Ref<number>,
   drawMap: () => void,
-  layers: Ref<any[]>,
+  layers: Ref<Map<string, Layer>>,
   toggleLayer: (layerId: string, visible?: boolean) => void
 ) {
   // 当前鼠标下的位置ID
@@ -219,6 +220,38 @@ export function useMapInteractions(
     }
   }
   
+  // 绘制激活状态的连接线（正在拖动创建的连接）
+  function drawActiveConnection(ctx: CanvasRenderingContext2D, offsetX: number) {
+    const startLocation = mapData.value.locations.find((loc: any) => loc.id === connectionStartId.value);
+    if (!startLocation || !canvasContainerRef.value) return;
+    
+    const rect = canvasContainerRef.value.getBoundingClientRect();
+    const gridSize = 30;
+    
+    // 计算鼠标的世界坐标
+    const mouseX = (dragStartX.value - rect.left - offsetX) / scale.value;
+    const mouseY = (dragStartY.value - rect.top - offsetY.value) / scale.value;
+    
+    // 确保坐标在有效范围内
+    const clampedMouseX = Math.max(0, Math.min(360 * gridSize, mouseX));
+    
+    ctx.save();
+    ctx.translate(offsetX, offsetY.value);
+    ctx.scale(scale.value, scale.value);
+    
+    // 绘制连接线
+    ctx.beginPath();
+    ctx.strokeStyle = 'var(--accent-secondary, #ff9800)';
+    ctx.lineWidth = 2 / scale.value;
+    
+    // 直接绘制从起点到鼠标位置的连接线
+    ctx.moveTo(startLocation.x, startLocation.y);
+    ctx.lineTo(clampedMouseX, mouseY);
+    
+    ctx.stroke();
+    ctx.restore();
+  }
+  
   // 处理鼠标移动事件
   function handleMouseMove(e: MouseEvent) {
     // 获取鼠标相对于画布容器的坐标
@@ -254,6 +287,10 @@ export function useMapInteractions(
     
     // 如果正在绘制连接
     if (isDrawingConnection.value) {
+      const connectionLayer = layers.value.get(LAYER_IDS.CONNECTION);
+      if (connectionLayer) {
+        drawActiveConnection(connectionLayer.ctx, offsetX.value);
+      }
       drawMap();
     }
   }
@@ -294,9 +331,15 @@ export function useMapInteractions(
     const mapX = (x - offsetX.value) / scale.value;
     const mapY = (y - offsetY.value) / scale.value;
     
-    // 计算缩放量
-    const delta = -e.deltaY * 0.001;
-    const newScale = Math.max(0.05, Math.min(3, scale.value + delta));
+    // 计算缩放量，降低灵敏度
+    const delta = -e.deltaY * 0.0002; // 将系数从 0.001 改为 0.0002
+    
+    // 根据当前缩放级别动态调整缩放步长
+    let scaleFactor = 1;
+    if (scale.value < 0.2) scaleFactor = 0.2; // 小比例尺时缩放更慢
+    else if (scale.value >0.5) scaleFactor = 5; // 大比例尺时缩放更快
+    
+    const newScale = Math.max(0.05, Math.min(3, scale.value + delta * scaleFactor));
     
     // 应用缩放
     scale.value = newScale;
@@ -321,6 +364,7 @@ export function useMapInteractions(
     handleKeyDown,
     handleWheel,
     handleToggleLayer,
-    hoveredLocationId
+    hoveredLocationId,
+    drawActiveConnection
   };
 } 

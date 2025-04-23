@@ -89,13 +89,7 @@ const {
   scale,
   mapData,
   currentLocationId,
-  isDrawingConnection,
-  connectionStartId,
-  dragStartX,
-  dragStartY,
-  canvasContainerRef,
-  mouseX,
-  mouseY
+  canvasContainerRef
 );
 
 // 地图工具管理
@@ -221,16 +215,7 @@ const initMapData = async () => {
         mouseX,
         mouseY,
         drawMap,
-        computed(() => {
-          // 转换 Map 为数组形式
-          const layerArray: any[] = [];
-          if (layers.value) {
-            layers.value.forEach((layer) => {
-              layerArray.push(layer);
-            });
-          }
-          return layerArray;
-        }),
+        layers,
         toggleLayer
       );
       
@@ -507,8 +492,32 @@ onBeforeUnmount(() => {
         </div>
         
         <div class="coordinate-display" v-if="showCoordinates">
-          <div class="coordinate-label">{{ mouseX > 0 ? `${Math.floor(180 - mouseX)}°W` : `${Math.abs(Math.floor(180 + mouseX))}°E` }}</div>
-          <div class="coordinate-label">{{ mouseY > 0 ? `${Math.floor(mouseY)}°N` : `${Math.abs(Math.floor(mouseY))}°S` }}</div>
+          <div class="coordinate-label">
+            {{ 
+              // 计算经度：将屏幕坐标转换为地图坐标
+              (() => {
+                const gridSize = 30;
+                const mapX = Math.floor((mouseX - offsetX) / (scale * gridSize));
+                const longitude = mapX - 180;
+                // 确保经度在 -180 到 180 度之间
+                const clampedLon = Math.max(-180, Math.min(180, longitude));
+                return clampedLon >= 0 ? `${clampedLon}°E` : `${Math.abs(clampedLon)}°W`;
+              })()
+            }}
+          </div>
+          <div class="coordinate-label">
+            {{ 
+              // 计算纬度：将屏幕坐标转换为地图坐标
+              (() => {
+                const gridSize = 30;
+                const mapY = Math.floor((mouseY - offsetY) / (scale * gridSize));
+                const latitude = 90 - mapY;
+                // 确保纬度在 -90 到 90 度之间
+                const clampedLat = Math.max(-90, Math.min(90, latitude));
+                return clampedLat >= 0 ? `${clampedLat}°N` : `${Math.abs(clampedLat)}°S`;
+              })()
+            }}
+          </div>
           <div class="coordinate-label">缩放: {{ Math.round(scale * 100)}}%</div>
           <button class="coord-toggle" @click="toggleCoordinates" title="隐藏坐标">
             <i class="fas fa-eye-slash"></i>

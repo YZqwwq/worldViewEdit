@@ -38,13 +38,7 @@ export function useMapCanvas(
   scale: Ref<number>,
   mapData: Ref<any>,
   currentLocationId: Ref<string>,
-  isDrawingConnection: Ref<boolean>,
-  connectionStartId: Ref<string>,
-  dragStartX: Ref<number>,
-  dragStartY: Ref<number>,
-  canvasContainerRef: Ref<HTMLElement | null>,
-  mouseX: Ref<number> = ref(0),
-  mouseY: Ref<number> = ref(0)
+  canvasContainerRef: Ref<HTMLElement | null>
 ) {
   // 使用图层管理器
   const {
@@ -68,7 +62,6 @@ export function useMapCanvas(
   const containerHeight = ref(0);
   
   // 初始化图层系统
-  // 绘制各个图层
   function initLayers() {
     if (!canvasContainerRef.value) {
       console.error('Canvas容器引用不存在');
@@ -78,19 +71,15 @@ export function useMapCanvas(
     console.log('初始化多图层地图画布系统');
     
     // 初始化图层管理器
-    // 传入Dom元素数值，用于初始化图层管理器
     initLayerManager(canvasContainerRef.value);
     
     // 创建并添加各图层 - 按照z-index从低到高的顺序
-    
-    // 1. 底部灰色背景图层 - 最底层
     const backgroundLayer = createBackgroundLayer(
       { id: LAYER_IDS.BACKGROUND, name: '背景', zIndex: 0, isBaseLayer: true },
       isDarkMode
     );
     addLayer(backgroundLayer);
     
-    // 2. 地图矩形图层 - 绘制大体的地图地形
     const mapLayer = createMapLayer(
       { id: LAYER_IDS.MAP, name: '地图', zIndex: 10 },
       isDarkMode,
@@ -100,7 +89,6 @@ export function useMapCanvas(
     );
     addLayer(mapLayer);
     
-    // 3. 地域交互图层 - 绘制势力范围
     const territoryLayer = createTerritoryLayer(
       { id: LAYER_IDS.TERRITORY, name: '地域', zIndex: 20 },
       mapData,
@@ -110,7 +98,6 @@ export function useMapCanvas(
     );
     addLayer(territoryLayer);
     
-    // 4. 网格图层 - 以矩形图层作为约束区
     const gridLayer = createGridLayer(
       { id: LAYER_IDS.GRID, name: '网格', zIndex: 30 },
       isDarkMode,
@@ -120,22 +107,20 @@ export function useMapCanvas(
     );
     addLayer(gridLayer);
     
-    // 5. 连线图层 - 用于在地图上相关势力间连线
     const connectionLayer = createConnectionLayer(
       { id: LAYER_IDS.CONNECTION, name: '连线', zIndex: 40 },
       mapData,
       offsetX,
       offsetY,
       scale,
-      isDrawingConnection,
-      connectionStartId,
-      mouseX,
-      mouseY,
+      ref(false),
+      ref(''),
+      ref(0),
+      ref(0),
       currentLocationId
     );
     addLayer(connectionLayer);
     
-    // 6. 位置节点图层
     const locationLayer = createLocationLayer(
       { id: LAYER_IDS.LOCATION, name: '位置', zIndex: 50 },
       mapData,
@@ -146,7 +131,6 @@ export function useMapCanvas(
     );
     addLayer(locationLayer);
     
-    // 7. 标签图层 - 用于在地图上打标签做描述
     const labelLayer = createLabelLayer(
       { id: LAYER_IDS.LABEL, name: '标签', zIndex: 60 },
       mapData,
@@ -157,7 +141,6 @@ export function useMapCanvas(
     );
     addLayer(labelLayer);
     
-    // 8. 经纬度注释图层 - 用于显示经纬度
     const coordinateLayer = createCoordinateLayer(
       { id: LAYER_IDS.COORDINATE, name: '坐标', zIndex: 70 },
       isDarkMode,
@@ -209,38 +192,6 @@ export function useMapCanvas(
     renderAll();
   }
   
-  // 绘制激活状态的连接线（正在拖动创建的连接）
-  function drawActiveConnection(ctx: CanvasRenderingContext2D, offsetX: number) {
-    const startLocation = mapData.value.locations.find((loc: any) => loc.id === connectionStartId.value);
-    if (!startLocation || !canvasContainerRef.value) return;
-    
-    const rect = canvasContainerRef.value.getBoundingClientRect();
-    const gridSize = 30;
-    
-    // 计算鼠标的世界坐标
-    const mouseX = (dragStartX.value - rect.left - offsetX) / scale.value;
-    const mouseY = (dragStartY.value - rect.top - offsetY.value) / scale.value;
-    
-    // 确保坐标在有效范围内
-    const clampedMouseX = Math.max(0, Math.min(360 * gridSize, mouseX));
-    
-    ctx.save();
-    ctx.translate(offsetX, offsetY.value);
-    ctx.scale(scale.value, scale.value);
-    
-    // 绘制连接线
-    ctx.beginPath();
-    ctx.strokeStyle = 'var(--accent-secondary, #ff9800)';
-    ctx.lineWidth = 2 / scale.value;
-    
-    // 直接绘制从起点到鼠标位置的连接线
-    ctx.moveTo(startLocation.x, startLocation.y);
-    ctx.lineTo(clampedMouseX, mouseY);
-    
-    ctx.stroke();
-    ctx.restore();
-  }
-  
   // 统一的绘制函数
   function drawMap() {
     // 清除所有图层
@@ -248,14 +199,6 @@ export function useMapCanvas(
     
     // 渲染所有图层
     renderAll();
-    
-    // 如果正在绘制连接，绘制活动连接
-    if (isDrawingConnection.value && connectionStartId.value && canvasContainerRef.value) {
-      const connectionLayer = layers.value.get(LAYER_IDS.CONNECTION);
-      if (connectionLayer) {
-        drawActiveConnection(connectionLayer.ctx, offsetX.value);
-      }
-    }
   }
   
   // 显示/隐藏指定图层
@@ -296,9 +239,7 @@ export function useMapCanvas(
       offsetY.value,
       isDarkMode.value,
       mapData.value,
-      currentLocationId.value,
-      isDrawingConnection.value,
-      connectionStartId.value
+      currentLocationId.value
     ];
     
     // 重绘

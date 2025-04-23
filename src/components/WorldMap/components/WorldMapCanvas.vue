@@ -149,13 +149,7 @@ const {
   scaleRef,
   mapDataRef,
   currentLocationIdRef,
-  isDrawingConnectionRef,
-  connectionStartIdRef,
-  dragStartXRef,
-  dragStartYRef,
-  canvasContainerRef,
-  mouseXRef,
-  mouseYRef
+  canvasContainerRef
 );
 
 // 使用地图交互
@@ -187,7 +181,7 @@ const {
   mouseXRef,
   mouseYRef,
   drawMap,
-  ref(Object.values(layers.value)),
+  layers,
   toggleLayer
 );
 
@@ -240,7 +234,7 @@ onBeforeUnmount(() => {
       <div class="layer-control-title">图层控制</div>
       <div class="layer-control-items">
         <div 
-          v-for="[id, layer] in layers" 
+          v-for="[id, layer] in Array.from(layers.entries())" 
           :key="id" 
           class="layer-control-item"
           :class="{ 'active': layerVisibility[id] }"

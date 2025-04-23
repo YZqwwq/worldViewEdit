@@ -483,7 +483,7 @@ export function createCoordinateLayer(
   // 格式化纬度
   function formatLatitude(latitude: number): string {
     const abs = Math.abs(latitude);
-    if (latitude >= 0) {
+    if (latitude <= 0) {  // 修改这里，小于等于0为北纬
       return `${abs}°N`;
     } else {
       return `${abs}°S`;
@@ -533,12 +533,8 @@ export function createCoordinateLayer(
       
       // 确保在地图区域内
       if (x >= mapLeft && x <= mapRight) {
-        // 底部标签
+        // 只在顶部显示经度标注
         ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        ctx.fillText(formatLongitude(lon), x, mapBottom + 5);
-        
-        // 顶部标签
         ctx.textBaseline = 'bottom';
         ctx.fillText(formatLongitude(lon), x, mapTop - 5);
       }
@@ -552,14 +548,10 @@ export function createCoordinateLayer(
       
       // 确保在地图区域内
       if (y >= mapTop && y <= mapBottom) {
-        // 左侧标签
+        // 只在左侧显示纬度标注
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
         ctx.fillText(formatLatitude(lat), mapLeft - 5, y);
-        
-        // 右侧标签
-        ctx.textAlign = 'left';
-        ctx.fillText(formatLatitude(lat), mapRight + 5, y);
       }
     }
     
@@ -571,19 +563,15 @@ export function createCoordinateLayer(
     ctx.font = '12px Arial';
     ctx.fillStyle = textColor;
     
-    // 本初子午线标签
+    // 本初子午线标签（只在顶部显示）
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillText('0°', originX, mapBottom + 5);
     ctx.textBaseline = 'bottom';
     ctx.fillText('0°', originX, mapTop - 5);
     
-    // 赤道标签
+    // 赤道标签（只在左侧显示）
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     ctx.fillText('0°', mapLeft - 5, originY);
-    ctx.textAlign = 'left';
-    ctx.fillText('0°', mapRight + 5, originY);
     
     ctx.restore();
   };
