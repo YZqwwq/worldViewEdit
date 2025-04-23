@@ -50,21 +50,10 @@ export function useMapRenderer(
     const ctx = ctxRef.value;
     const canvas = canvasRef.value;
     const gridSize = 30;
-    console.log('ctx',ctx);
-    console.log('canvas',canvas); 
-    console.log('offsetX',offsetX.value);
-    console.log('offsetY',offsetY.value);
-    console.log('scale',scale.value); 
+    
     try {
       // 清空画布
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // 根据当前模式设置背景颜色
-      ctx.fillStyle = isDarkMode.value ? MAP_BACKGROUND_DARK : MAP_BACKGROUND_LIGHT;
-      
-      // 计算地图的总宽度和高度（以像素为单位）
-      const mapWidthInPixels = 360 * gridSize;
-      const mapHeightInPixels = 180 * gridSize;
       
       // 保存当前变换状态
       ctx.save();
@@ -75,42 +64,25 @@ export function useMapRenderer(
       
       // 绘制地图背景和边框
       ctx.fillStyle = isDarkMode.value ? MAP_BACKGROUND_DARK : MAP_BACKGROUND_LIGHT;
-      ctx.fillRect(0, 0, mapWidthInPixels, mapHeightInPixels);
+      ctx.fillRect(0, 0, 360 * gridSize, 180 * gridSize);
       
-      // 绘制地图边框 - 使用实线边框
+      // 绘制地图边框
       ctx.strokeStyle = isDarkMode.value ? MAP_BORDER_DARK : MAP_BORDER_LIGHT;
-      // 使用固定线宽值，根据缩放范围调整
       if (scale.value < 0.2) {
-        ctx.lineWidth = 1.2; // 缩小状态下使用较粗的边框
+        ctx.lineWidth = 1.2;
       } else if (scale.value < 0.5) {
-        ctx.lineWidth = 0.8; // 中等缩放使用中等边框
+        ctx.lineWidth = 0.8;
       } else {
-        ctx.lineWidth = 0.5; // 放大状态下使用细边框
+        ctx.lineWidth = 0.5;
       }
-      ctx.strokeRect(0, 0, mapWidthInPixels, mapHeightInPixels);
+      ctx.strokeRect(0, 0, 360 * gridSize, 180 * gridSize);
       
       // 恢复变换状态
       ctx.restore();
       
-      // 绘制网格线 - 网格线会在边框内绘制
+      // 绘制网格线和坐标系统
       drawGridLines(ctx, canvas.width, canvas.height, offsetX.value);
-      
-      // 绘制坐标轴和标记
       drawCoordinateSystem(ctx, canvas.width, canvas.height, offsetX.value);
-      
-      // 保存当前绘图状态
-      ctx.save();
-      
-      // 应用变换（偏移和缩放）
-      ctx.translate(offsetX.value, offsetY.value);
-      ctx.scale(scale.value, scale.value);
-      
-      // 绘制基本地图内容
-      // drawConnections(ctx); // 先绘制连接线
-      // drawLocations(ctx);   // 再绘制位置节点
-      
-      // 恢复原始绘图状态
-      ctx.restore();
       
       // 处理连接线绘制（如果正在绘制）
       if (isDrawingConnection.value && connectionStartId.value && canvasRef.value) {
