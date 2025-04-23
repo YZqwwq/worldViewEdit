@@ -1,4 +1,3 @@
-import { ref } from 'vue';
 import type { Ref } from 'vue';
 import type { Layer, LayerConfig } from './useLayerManager';
 import { createBaseLayer, getMapRect } from './useLayerFactory';

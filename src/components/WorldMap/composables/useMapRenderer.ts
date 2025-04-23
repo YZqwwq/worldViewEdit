@@ -42,6 +42,7 @@ export function useMapRenderer(
   dragStartX: Ref<number>,
   dragStartY: Ref<number>
 ) {
+
   // 绘制地图
   function drawMap() {
     if (!ctxRef.value || !canvasRef.value) return;
@@ -57,12 +58,6 @@ export function useMapRenderer(
     try {
       // 清空画布
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // 添加灰色背景，使地图缩小时能看到完整边界
-      ctx.save();
-      ctx.fillStyle = isDarkMode.value ? BACKGROUND_DARK : BACKGROUND_LIGHT;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.restore();
       
       // 根据当前模式设置背景颜色
       ctx.fillStyle = isDarkMode.value ? MAP_BACKGROUND_DARK : MAP_BACKGROUND_LIGHT;

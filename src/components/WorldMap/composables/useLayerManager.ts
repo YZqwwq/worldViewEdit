@@ -1,4 +1,4 @@
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, shallowRef } from 'vue';
 import type { Ref } from 'vue';
 
 export interface Layer {
@@ -20,6 +20,7 @@ export interface Layer {
 }
 
 // 图层配置接口
+// 可以传入id,name,zIndex,visible,isBaseLayer(不需要全部传入)
 export interface LayerConfig {
   id: string;
   name: string;
@@ -30,8 +31,8 @@ export interface LayerConfig {
 
 // 创建图层管理器
 export function useLayerManager() {
-  // 使用字符串映射对象而不是 Map
-  const layerMap = ref<Record<string, Layer>>({});
+  // 使用shallowRef而不是ref，避免自动解包嵌套的ref
+  const layerMap = shallowRef<Record<string, Layer>>({});
   const parentElement = ref<HTMLElement | null>(null);
   const canvasWidth = ref(0);
   const canvasHeight = ref(0);
@@ -111,7 +112,7 @@ export function useLayerManager() {
   }
   
   // 初始化图层管理器
-  function init(element: HTMLElement): void {
+  function initLayerManager(element: HTMLElement): void {
     parentElement.value = element;
     
     // 设置容器样式
@@ -166,19 +167,23 @@ export function useLayerManager() {
   });
   
   return {
-    layers,
-    parentElement,
-    canvasWidth,
-    canvasHeight,
-    addLayer,
-    getLayer,
-    removeLayer,
-    showLayer,
-    hideLayer,
-    init,
-    resizeAll,
-    renderAll,
-    clearAll,
-    destroyAll
+    layers,  // 返回图层列表
+    parentElement,  // 返回父元素
+    canvasWidth,  // 返回画布宽度
+    canvasHeight,  // 返回画布高度
+    addLayer,  // 添加图层
+    getLayer,  // 获取图层
+    removeLayer,  // 移除图层
+    showLayer,  // 显示图层
+    hideLayer,  // 隐藏图层
+    initLayerManager,  // 初始化图层管理器
+    resizeAll,  // 调整所有图层大小
+    renderAll,  // 渲染所有图层
+    clearAll,  // 清空所有图层
+    destroyAll  // 销毁所有图层
   };
 } 
+
+function type(visible: Ref<boolean, boolean>): any {
+    throw new Error('Function not implemented.');
+}

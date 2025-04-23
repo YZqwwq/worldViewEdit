@@ -17,6 +17,7 @@ export function useMapTools(
   function initMapPosition() {
     if (!canvasRef.value) return;
     
+    //获取Dom的大小，用于规范地图的显示位置
     const rect = canvasRef.value.getBoundingClientRect();
     const gridSize = 30;
     

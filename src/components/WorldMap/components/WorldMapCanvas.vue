@@ -130,9 +130,11 @@ watch(() => props.mapData, (newValue) => {
   mapDataRef.value = newValue;
 }, { deep: true });
 
+// 创建 canvasContainerRef
+const canvasContainerRef = ref<HTMLElement | null>(null);
+
 // 使用地图画布管理器
 const {
-  canvasContainerRef,
   canvasWidth,
   canvasHeight,
   drawMap,
@@ -151,6 +153,7 @@ const {
   connectionStartIdRef,
   dragStartXRef,
   dragStartYRef,
+  canvasContainerRef,
   mouseXRef,
   mouseYRef
 );
@@ -184,7 +187,7 @@ const {
   mouseXRef,
   mouseYRef,
   drawMap,
-  computed(() => layers.value),
+  ref(Object.values(layers.value)),
   toggleLayer
 );
 
@@ -237,14 +240,14 @@ onBeforeUnmount(() => {
       <div class="layer-control-title">图层控制</div>
       <div class="layer-control-items">
         <div 
-          v-for="layer in layers" 
-          :key="layer.id" 
+          v-for="[id, layer] in layers" 
+          :key="id" 
           class="layer-control-item"
-          :class="{ 'active': layerVisibility[layer.id] }"
-          @click="toggleLayerVisibility(layer.id)"
+          :class="{ 'active': layerVisibility[id] }"
+          @click="toggleLayerVisibility(id)"
         >
           <div class="layer-checkbox">
-            <i class="fas" :class="layerVisibility[layer.id] ? 'fa-check-square' : 'fa-square'"></i>
+            <i class="fas" :class="layerVisibility[id] ? 'fa-check-square' : 'fa-square'"></i>
           </div>
           <div class="layer-name">{{ layer.name }}</div>
         </div>

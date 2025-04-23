@@ -148,8 +148,20 @@ const layerVisibility = ref({
 
 // 切换图层可见性
 function toggleLayerVisibility(layerId: string) {
-  toggleLayer(layerId);
-  layerVisibility.value[layerId] = !layerVisibility.value[layerId];
+  console.log('切换图层可见性:', layerId);
+  // 检查图层是否已初始化
+  if (!isMapInitialized.value) {
+    console.warn('地图尚未初始化，无法切换图层');
+    return;
+  }
+  
+  try {
+    toggleLayer(layerId);
+    layerVisibility.value[layerId] = !layerVisibility.value[layerId];
+    console.log(`图层 ${layerId} 可见性已切换为:`, layerVisibility.value[layerId]);
+  } catch (e) {
+    console.error('切换图层可见性失败:', e);
+  }
 }
 
 // 初始化地图数据
@@ -166,67 +178,120 @@ const initMapData = async () => {
       return;
     }
     
+    // 创建初始化进度日志
     console.log('找到容器元素，大小:', canvasContainerRef.value.getBoundingClientRect());
     
-    // 初始化地图交互
-    console.log('初始化地图交互');
-    const interactions = useMapInteractions(
-      canvasContainerRef,
-      mapData,
-      isDragging,
-      dragStartX,
-      dragStartY,
-      offsetX,
-      offsetY,
-      scale,
-      isDrawingConnection,
-      connectionStartId,
-      currentLocationId,
-      locationNameInput,
-      locationDescInput,
-      isEditing,
-      activeTool,
-      mouseX,
-      mouseY,
-      drawMap,
-      computed(() => {
-        // 转换 Map 为数组形式
-        const layerArray: any[] = [];
-        if (layers.value) {
-          layers.value.forEach((layer) => {
-            layerArray.push(layer);
-          });
-        }
-        return layerArray;
-      }),
-      toggleLayer
-    );
+    // 防止容器尺寸为0的情况
+    const rect = canvasContainerRef.value.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      console.warn('容器尺寸为0，等待DOM完全渲染');
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
     
-    // 设置交互处理函数
-    handleMouseDown = interactions.handleMouseDown;
-    handleMouseMove = interactions.handleMouseMove;
-    handleMouseUp = interactions.handleMouseUp;
-    handleClick = interactions.handleClick;
-    handleKeyDown = interactions.handleKeyDown;
-    handleWheel = interactions.handleWheel;
+    // 初始化前确保mapData已加载
+    if (!mapData.value || !mapData.value.locations) {
+      console.log('初始化mapData为空，使用默认数据');
+      mapData.value = {
+        name: '新地图',
+        description: '',
+        locations: [],
+        connections: []
+      };
+    }
+    
+    // 初始化地图交互
+    try {
+      console.log('初始化地图交互');
+      const interactions = useMapInteractions(
+        canvasContainerRef,
+        mapData,
+        isDragging,
+        dragStartX,
+        dragStartY,
+        offsetX,
+        offsetY,
+        scale,
+        isDrawingConnection,
+        connectionStartId,
+        currentLocationId,
+        locationNameInput,
+        locationDescInput,
+        isEditing,
+        activeTool,
+        mouseX,
+        mouseY,
+        drawMap,
+        computed(() => {
+          // 转换 Map 为数组形式
+          const layerArray: any[] = [];
+          if (layers.value) {
+            layers.value.forEach((layer) => {
+              layerArray.push(layer);
+            });
+          }
+          return layerArray;
+        }),
+        toggleLayer
+      );
+      
+      // 设置交互处理函数
+      handleMouseDown = interactions.handleMouseDown;
+      handleMouseMove = interactions.handleMouseMove;
+      handleMouseUp = interactions.handleMouseUp;
+      handleClick = interactions.handleClick;
+      handleKeyDown = interactions.handleKeyDown;
+      handleWheel = interactions.handleWheel;
+      
+      console.log('交互处理函数设置成功');
+    } catch (e) {
+      console.error('初始化地图交互失败:', e);
+      throw e;
+    }
     
     // 初始化画布
-    console.log('初始化画布');
-    initCanvas();
+    try {
+      console.log('初始化画布');
+      initCanvas();
+      console.log('画布初始化成功');
+    } catch (e) {
+      console.error('初始化画布失败:', e);
+      throw e;
+    }
     
     // 调整大小
-    console.log('调整画布大小');
-    handleResize();
+    try {
+      console.log('调整画布大小');
+      handleResize();
+      console.log('画布大小调整成功');
+    } catch (e) {
+      console.error('调整画布大小失败:', e);
+      throw e;
+    }
     
     // 适应视图
-    console.log('适应视图');
-    fitWorldView();
+    try {
+      console.log('适应视图');
+      fitWorldView();
+      console.log('视图适应成功');
+    } catch (e) {
+      console.error('适应视图失败:', e);
+      throw e;
+    }
     
     // 初始化图层可见性状态
-    Object.keys(LAYER_IDS).forEach((key) => {
-      const layerId = LAYER_IDS[key as keyof typeof LAYER_IDS];
-      layerVisibility.value[layerId] = getLayerVisibility(layerId);
-    });
+    try {
+      console.log('初始化图层可见性状态');
+      Object.keys(LAYER_IDS).forEach((key) => {
+        const layerId = LAYER_IDS[key as keyof typeof LAYER_IDS];
+        const isVisible = getLayerVisibility(layerId);
+        layerVisibility.value[layerId] = isVisible;
+        console.log(`图层 ${layerId} 初始可见性:`, isVisible);
+      });
+      console.log('图层可见性状态初始化成功');
+    } catch (e) {
+      console.error('初始化图层可见性状态失败:', e);
+      // 不抛出错误，继续初始化
+    }
     
     isLoading.value = false;
     isMapInitialized.value = true;
@@ -234,6 +299,7 @@ const initMapData = async () => {
   } catch (e: any) {
     console.error('地图初始化失败:', e);
     isLoading.value = false;
+    isMapInitialized.value = false;
     error.value = '初始化地图失败：' + (e instanceof Error ? e.message : String(e));
   }
 };
@@ -297,17 +363,34 @@ onMounted(async () => {
     }
     
     console.log('世界ID:', worldStore.$state.id);
-    console.log('等待DOM完全渲染...');
     
-    // 等待DOM完全渲染并获取容器引用
+    // 等待DOM完全渲染并获取容器引用 - 增加延迟时间确保DOM完全渲染
     setTimeout(() => {
-      // 检查容器是否可用
-      console.log('检查容器可用性:', canvasContainerRef.value ? '可用' : '不可用');
-      
-      // 准备初始化地图
-      console.log('开始初始化地图');
-      initMapData();
-    }, 100);
+      try {
+        // 检查容器是否可用
+        console.log('检查容器可用性:', canvasContainerRef.value ? '可用' : '不可用');
+        
+        if (!canvasContainerRef.value) {
+          console.warn('无法通过ref获取容器，尝试通过ID获取');
+          const container = document.getElementById('map-canvas-container');
+          if (container) {
+            console.log('通过ID找到容器');
+            canvasContainerRef.value = container;
+          } else {
+            console.error('无法找到地图容器元素');
+            error.value = '无法找到地图容器元素';
+            return;
+          }
+        }
+        
+        // 准备初始化地图
+        console.log('开始初始化地图');
+        initMapData();
+      } catch (e) {
+        console.error('初始化过程中出错:', e);
+        error.value = '初始化过程中出错: ' + (e instanceof Error ? e.message : String(e));
+      }
+    }, 300); // 增加延迟时间
   } catch (e) {
     console.error('组件挂载失败:', e);
     error.value = '初始化失败：' + (e instanceof Error ? e.message : String(e));
@@ -367,40 +450,55 @@ onBeforeUnmount(() => {
         </div>
         
         <!-- 图层控制 -->
-        <div class="layer-controls">
+        <div class="layer-controls" :class="{ 'disabled': !isMapInitialized }">
           <div class="layer-control-title">图层</div>
           <div class="layer-buttons">
             <button 
-              :class="['layer-btn', { active: layerVisibility[LAYER_IDS.GRID] }]" 
-              @click="toggleLayerVisibility(LAYER_IDS.GRID)"
+              :class="['layer-btn', { 
+                active: layerVisibility[LAYER_IDS.GRID], 
+                'disabled': !isMapInitialized 
+              }]" 
+              @click="isMapInitialized && toggleLayerVisibility(LAYER_IDS.GRID)"
               title="网格图层"
             >
               <i class="fas fa-th"></i>
             </button>
             <button 
-              :class="['layer-btn', { active: layerVisibility[LAYER_IDS.TERRITORY] }]" 
-              @click="toggleLayerVisibility(LAYER_IDS.TERRITORY)"
+              :class="['layer-btn', { 
+                active: layerVisibility[LAYER_IDS.TERRITORY], 
+                'disabled': !isMapInitialized 
+              }]" 
+              @click="isMapInitialized && toggleLayerVisibility(LAYER_IDS.TERRITORY)"
               title="地域图层"
             >
               <i class="fas fa-draw-polygon"></i>
             </button>
             <button 
-              :class="['layer-btn', { active: layerVisibility[LAYER_IDS.CONNECTION] }]" 
-              @click="toggleLayerVisibility(LAYER_IDS.CONNECTION)"
+              :class="['layer-btn', { 
+                active: layerVisibility[LAYER_IDS.CONNECTION], 
+                'disabled': !isMapInitialized 
+              }]" 
+              @click="isMapInitialized && toggleLayerVisibility(LAYER_IDS.CONNECTION)"
               title="连线图层"
             >
               <i class="fas fa-project-diagram"></i>
             </button>
             <button 
-              :class="['layer-btn', { active: layerVisibility[LAYER_IDS.LABEL] }]" 
-              @click="toggleLayerVisibility(LAYER_IDS.LABEL)"
+              :class="['layer-btn', { 
+                active: layerVisibility[LAYER_IDS.LABEL], 
+                'disabled': !isMapInitialized 
+              }]" 
+              @click="isMapInitialized && toggleLayerVisibility(LAYER_IDS.LABEL)"
               title="标签图层"
             >
               <i class="fas fa-tag"></i>
             </button>
             <button 
-              :class="['layer-btn', { active: layerVisibility[LAYER_IDS.COORDINATE] }]" 
-              @click="toggleLayerVisibility(LAYER_IDS.COORDINATE)"
+              :class="['layer-btn', { 
+                active: layerVisibility[LAYER_IDS.COORDINATE], 
+                'disabled': !isMapInitialized 
+              }]" 
+              @click="isMapInitialized && toggleLayerVisibility(LAYER_IDS.COORDINATE)"
               title="坐标图层"
             >
               <i class="fas fa-compass"></i>
@@ -629,6 +727,11 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-color);
 }
 
+.layer-controls.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .layer-control-title {
   font-size: 12px;
   font-weight: bold;
@@ -662,6 +765,11 @@ onBeforeUnmount(() => {
 .layer-btn.active {
   color: var(--accent-primary);
   background-color: var(--bg-hover);
+}
+
+.layer-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .coordinate-display {

@@ -57,7 +57,7 @@ export function useMapCanvas(
     removeLayer,
     showLayer,
     hideLayer,
-    init: initLayerManager,
+    initLayerManager,
     resizeAll,
     renderAll,
     clearAll
@@ -68,6 +68,7 @@ export function useMapCanvas(
   const containerHeight = ref(0);
   
   // 初始化图层系统
+  // 绘制各个图层
   function initLayers() {
     if (!canvasContainerRef.value) {
       console.error('Canvas容器引用不存在');
@@ -77,6 +78,7 @@ export function useMapCanvas(
     console.log('初始化多图层地图画布系统');
     
     // 初始化图层管理器
+    // 传入Dom元素数值，用于初始化图层管理器
     initLayerManager(canvasContainerRef.value);
     
     // 创建并添加各图层 - 按照z-index从低到高的顺序
