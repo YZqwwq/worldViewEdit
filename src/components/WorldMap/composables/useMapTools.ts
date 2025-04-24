@@ -1,5 +1,5 @@
 import type { Ref } from 'vue';
-import { useMapStore } from '../../../stores/mapStore';
+import { useMapState } from './useMapState';
 
 // 定义地图尺寸接口
 interface MapDimensions {
@@ -24,9 +24,6 @@ interface PositionCalculationParams {
  */
 export function useMapTools(
   canvasRef: Ref<HTMLCanvasElement | null>,
-  offsetX: Ref<number>,
-  offsetY: Ref<number>,
-  scale: Ref<number>,
   drawMap: () => void,
   minScale: number = 0.08,
   maxScale: number = 5.0,
@@ -37,7 +34,7 @@ export function useMapTools(
     defaultScale?: number;
   } = {}
 ) {
-  const mapStore = useMapStore();
+  const mapState = useMapState();
   
   // 合并默认选项
   const {
@@ -85,18 +82,18 @@ export function useMapTools(
     
     try {
       const rect = canvasRef.value.getBoundingClientRect();
-      const dimensions = calculateMapDimensions(scale.value);
+      const dimensions = calculateMapDimensions(mapState.scale.value);
       
       const { x, y } = calculateCenterPosition({
         canvasWidth: rect.width,
         canvasHeight: rect.height,
         mapWidth: dimensions.width,
         mapHeight: dimensions.height,
-        scale: scale.value,
+        scale: mapState.scale.value,
         verticalOffset
       });
       
-      mapStore.updateViewState({
+      mapState.immediateUpdate({
         offsetX: x,
         offsetY: y
       });
@@ -109,7 +106,7 @@ export function useMapTools(
   
   // 重置视图函数
   function resetView() {
-    mapStore.updateViewState({
+    mapState.immediateUpdate({
       scale: 0.2
     });
     initMapPosition();
@@ -118,7 +115,7 @@ export function useMapTools(
   // 适应视图函数
   function fitWorldView() {
     if (!canvasRef.value) {
-      mapStore.updateViewState({
+      mapState.immediateUpdate({
         scale: defaultScale
       });
       return;
@@ -139,14 +136,14 @@ export function useMapTools(
         )
       );
       
-      mapStore.updateViewState({
+      mapState.immediateUpdate({
         scale: newScale
       });
       
       initMapPosition();
     } catch (error) {
       console.error('Failed to fit world view:', error);
-      mapStore.updateViewState({
+      mapState.immediateUpdate({
         scale: defaultScale
       });
     }

@@ -36,27 +36,32 @@ const emit = defineEmits<{
 const canvasContainerRef = ref<HTMLElement | null>(null);
 
 // 地图状态管理
-const { 
-  isEditing,
-  isDarkMode,
-  activeTool,
-  isDrawingConnection,
-  connectionStartId,
+const mapState = useMapState();
+
+// 解构基础状态
+const {
   offsetX,
   offsetY,
   scale,
-  minScale,
-  maxScale,
-  mouseX,
-  mouseY,
-  showCoordinates,
-  isDragging,
-  dragStartX,
-  dragStartY,
-  setActiveTool,
-  toggleCoordinates,
-  toggleDarkMode
-} = useMapState(mapStore);
+  isDarkMode,
+  isEditing,
+  currentTool: activeTool,
+  layerVisibility
+} = mapState;
+
+// 本地状态
+const isDragging = ref(false);
+const dragStartX = ref(0);
+const dragStartY = ref(0);
+const isDrawingConnection = ref(false);
+const connectionStartId = ref('');
+const mouseX = ref(0);
+const mouseY = ref(0);
+const showCoordinates = ref(true);
+
+// 缩放限制
+const minScale = ref(0.08);
+const maxScale = ref(5);
 
 // 地图数据管理
 const { 
@@ -95,9 +100,6 @@ const {
 // 地图工具管理
 const { resetView, fitWorldView } = useMapTools(
   canvasContainerRef as unknown as Ref<HTMLCanvasElement | null>, 
-  offsetX, 
-  offsetY, 
-  scale, 
   drawMap, 
   minScale.value, 
   maxScale.value
@@ -128,18 +130,6 @@ let handleClick = (e: MouseEvent) => {};
 let handleKeyDown = (e: KeyboardEvent) => {};
 let handleWheel = (e: WheelEvent) => {};
 
-// 图层可见性控制
-const layerVisibility = ref({
-  [LAYER_IDS.BACKGROUND]: true,
-  [LAYER_IDS.MAP]: true,
-  [LAYER_IDS.TERRITORY]: true,
-  [LAYER_IDS.GRID]: true,
-  [LAYER_IDS.CONNECTION]: true,
-  [LAYER_IDS.LOCATION]: true,
-  [LAYER_IDS.LABEL]: true,
-  [LAYER_IDS.COORDINATE]: true
-});
-
 // 切换图层可见性
 function toggleLayerVisibility(layerId: string) {
   if (!isMapInitialized.value) {
@@ -149,10 +139,31 @@ function toggleLayerVisibility(layerId: string) {
   
   try {
     toggleLayer(layerId);
-    layerVisibility.value[layerId] = !layerVisibility.value[layerId];
+    mapState.updateLayerVisibility(layerId, !layerVisibility.value[layerId]);
   } catch (e) {
     console.error('切换图层可见性失败:', e);
   }
+}
+
+// 设置活动工具
+function setActiveTool(tool: 'draw' | 'territory' | 'location' | 'connection' | 'label') {
+  mapState.immediateUpdate({ currentTool: tool });
+  isDrawingConnection.value = false;
+  connectionStartId.value = '';
+  
+  if (tool !== 'draw' && isEditing.value) {
+    mapState.immediateUpdate({ isEditing: false });
+  }
+}
+
+// 切换坐标显示
+function toggleCoordinates() {
+  showCoordinates.value = !showCoordinates.value;
+}
+
+// 切换暗色/亮色模式
+function toggleDarkMode() {
+  mapState.immediateUpdate({ isDarkMode: !isDarkMode.value });
 }
 
 // 初始化地图数据

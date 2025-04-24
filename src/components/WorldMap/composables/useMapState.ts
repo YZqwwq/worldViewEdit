@@ -1,126 +1,145 @@
 import { ref, computed } from 'vue';
 import { useMapStore } from '../../../stores/mapStore';
 import type { ViewState } from '../../../types/map';
+import { debounce } from 'lodash';
+
+// 定义基础状态类型
+interface BaseState {
+  offsetX: number;
+  offsetY: number;
+  scale: number;
+  isDarkMode: boolean;
+  isEditing: boolean;
+  currentTool: string;
+  layerVisibility: Record<string, boolean>;
+}
+
+// 定义系统错误类型
+interface SystemError extends Error {
+  code?: string;
+  isSystemError?: boolean;
+}
 
 /**
  * 地图状态管理
  * 包含所有与地图状态相关的响应式变量和方法
  */
-export function useMapState(mapStore: ReturnType<typeof useMapStore>, drawMap?: () => void) {
-  // 使用 computed 从 store 中获取状态
-  const isEditing = computed(() => mapStore.editState.isEditing);
-  const isDarkMode = computed(() => mapStore.viewState.isDarkMode);
-  const activeTool = computed(() => mapStore.editState.currentTool);
-  const offsetX = computed(() => mapStore.viewState.offsetX);
-  const offsetY = computed(() => mapStore.viewState.offsetY);
-  const scale = computed(() => mapStore.viewState.scale);
+export function useMapState() {
+  const mapStore = useMapStore();
   
-  // 本地状态
-  const isDragging = ref(false);
-  const dragStartX = ref(0);
-  const dragStartY = ref(0);
-  const isDrawingConnection = ref(false);
-  const connectionStartId = ref('');
-  const mouseX = ref(0);
-  const mouseY = ref(0);
-  const showCoordinates = ref(true);
+  // 1. 基础状态（直接暴露）
+  const baseState = {
+    offsetX: ref(0),
+    offsetY: ref(0),
+    scale: ref(1),
+    isDarkMode: ref(false),
+    isEditing: ref(false),
+    currentTool: ref('draw'),
+    layerVisibility: ref<Record<string, boolean>>({})
+  } as const;
   
-  // 缩放限制
-  const minScale = ref(0.08);
-  const maxScale = ref(5);
-  
-  // 地图范围限制
-  const mapLimits = {
-    minLatitude: -90,
-    maxLatitude: 90,
-    minLongitude: -180,
-    maxLongitude: 180
+  // 2. 派生状态（通过方法访问）
+  const derivedState = {
+    // 视口相关
+    viewportTiles: computed(() => {
+      // 计算当前视口内的瓦片坐标
+      return {
+        x: Math.floor(baseState.offsetX.value / 30),
+        y: Math.floor(baseState.offsetY.value / 30)
+      };
+    }),
+    
+    // 图层相关
+    layerBlendResult: computed(() => {
+      // 计算图层混合结果
+      return Object.entries(baseState.layerVisibility.value)
+        .filter(([_, visible]) => visible)
+        .map(([id]) => id);
+    })
   };
   
-  // 设置活动工具
-  function setActiveTool(tool: 'draw' | 'territory' | 'location' | 'connection' | 'label') {
-    mapStore.setCurrentTool(tool);
-    isDrawingConnection.value = false;
-    connectionStartId.value = '';
+  // 3. 状态同步
+  const syncToStore = () => {
+    const state: Partial<ViewState> = {
+      offsetX: baseState.offsetX.value,
+      offsetY: baseState.offsetY.value,
+      scale: baseState.scale.value,
+      isDarkMode: baseState.isDarkMode.value
+    };
+    mapStore.updateViewState(state);
+  };
+  
+  // 防抖的状态同步
+  const debouncedSyncToStore = debounce(syncToStore, 300);
+  
+  // 4. 状态更新方法
+  const updateMethods = {
+    // 批量更新
+    batchUpdate(updates: Partial<BaseState>) {
+      Object.entries(updates).forEach(([key, value]) => {
+        const stateKey = key as keyof typeof baseState;
+        if (stateKey in baseState) {
+          baseState[stateKey].value = value;
+        }
+      });
+      
+      // 延迟同步到 store
+      debouncedSyncToStore();
+    },
     
-    if (tool !== 'draw' && isEditing.value) {
-      mapStore.setIsEditing(false);
+    // 立即更新
+    immediateUpdate(updates: Partial<BaseState>) {
+      Object.entries(updates).forEach(([key, value]) => {
+        const stateKey = key as keyof typeof baseState;
+        if (stateKey in baseState) {
+          baseState[stateKey].value = value;
+        }
+      });
+      
+      // 立即同步到 store
+      syncToStore();
+    },
+    
+    // 特定业务更新方法
+    updateLayerVisibility(layerId: string, visible: boolean) {
+      try {
+        const newVisibility = { ...baseState.layerVisibility.value };
+        newVisibility[layerId] = visible;
+        baseState.layerVisibility.value = newVisibility;
+        
+        // 立即同步到 store
+        syncToStore();
+      } catch (error) {
+        if (isSystemError(error)) {
+          // 处理系统错误
+          handleSystemError(error);
+        } else {
+          // 透传业务错误
+          throw error;
+        }
+      }
     }
-  }
+  };
   
-  // 切换坐标显示
-  function toggleCoordinates() {
-    showCoordinates.value = !showCoordinates.value;
-    mapStore.updateViewState({ showCoordinates: showCoordinates.value } as Partial<ViewState>);
-  }
+  // 5. 错误处理
+  const isSystemError = (error: unknown): error is SystemError => {
+    return error instanceof Error && 'isSystemError' in error;
+  };
   
-  // 切换暗色/亮色模式
-  function toggleDarkMode() {
-    mapStore.toggleDarkMode();
-  }
-  
-  // 更新鼠标位置
-  function updateMousePosition(x: number, y: number) {
-    mouseX.value = x;
-    mouseY.value = y;
-  }
-  
-  // 开始拖动
-  function startDrag(x: number, y: number) {
-    isDragging.value = true;
-    dragStartX.value = x;
-    dragStartY.value = y;
-  }
-  
-  // 结束拖动
-  function endDrag() {
-    isDragging.value = false;
-  }
-  
-  // 开始绘制连接
-  function startDrawingConnection(id: string) {
-    isDrawingConnection.value = true;
-    connectionStartId.value = id;
-  }
-  
-  // 结束绘制连接
-  function endDrawingConnection() {
-    isDrawingConnection.value = false;
-    connectionStartId.value = '';
-  }
+  const handleSystemError = (error: SystemError) => {
+    console.error('系统错误:', error);
+    // 可以添加错误通知等
+  };
   
   return {
-    // 计算属性
-    isEditing,
-    isDarkMode,
-    activeTool,
-    offsetX,
-    offsetY,
-    scale,
+    // 基础状态
+    ...baseState,
     
-    // 响应式引用
-    isDragging,
-    dragStartX,
-    dragStartY,
-    isDrawingConnection,
-    connectionStartId,
-    mouseX,
-    mouseY,
-    showCoordinates,
-    minScale,
-    maxScale,
+    // 派生状态访问方法
+    getViewportTiles: () => derivedState.viewportTiles.value,
+    getLayerBlendResult: () => derivedState.layerBlendResult.value,
     
-    // 常量
-    mapLimits,
-    
-    // 方法
-    setActiveTool,
-    toggleCoordinates,
-    toggleDarkMode,
-    updateMousePosition,
-    startDrag,
-    endDrag,
-    startDrawingConnection,
-    endDrawingConnection
+    // 状态更新方法
+    ...updateMethods
   };
 } 

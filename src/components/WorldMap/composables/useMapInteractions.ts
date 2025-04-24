@@ -3,6 +3,7 @@ import type { Ref } from 'vue';
 import { LAYER_IDS } from './useMapCanvas';
 import { getMapRect } from './useLayerFactory';
 import type { Layer } from './useLayerManager';
+import { useMapStore } from '../../../stores/mapStore';
 
 /**
  * 地图交互管理器
@@ -30,6 +31,8 @@ export function useMapInteractions(
   layers: Ref<Map<string, Layer>>,
   toggleLayer: (layerId: string, visible?: boolean) => void
 ) {
+  const mapStore = useMapStore();
+  
   // 当前鼠标下的位置ID
   const hoveredLocationId = ref<string | null>(null);
   
@@ -269,7 +272,7 @@ export function useMapInteractions(
     hoveredLocationId.value = findLocationUnderCursor(x, y);
     
     // 如果正在拖动
-    if (isDragging.value && activeTool.value === 'select') {
+    if (isDragging.value && activeTool.value === 'draw') {
       // 计算拖动距离
       const dx = x - dragStartX.value;
       const dy = y - dragStartY.value;
@@ -279,8 +282,10 @@ export function useMapInteractions(
       dragStartY.value = y;
       
       // 更新地图偏移
-      offsetX.value += dx;
-      offsetY.value += dy;
+      mapStore.updateViewState({
+        offsetX: offsetX.value + dx,
+        offsetY: offsetY.value + dy
+      });
       
       drawMap();
     }
@@ -342,11 +347,11 @@ export function useMapInteractions(
     const newScale = Math.max(0.05, Math.min(3, scale.value + delta * scaleFactor));
     
     // 应用缩放
-    scale.value = newScale;
-    
-    // 调整偏移，使缩放以鼠标位置为中心
-    offsetX.value = x - mapX * scale.value;
-    offsetY.value = y - mapY * scale.value;
+    mapStore.updateViewState({
+      scale: newScale,
+      offsetX: x - mapX * newScale,
+      offsetY: y - mapY * newScale
+    });
     
     drawMap();
   }
