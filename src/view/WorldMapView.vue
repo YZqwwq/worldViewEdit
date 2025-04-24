@@ -142,8 +142,6 @@ const layerVisibility = ref({
 
 // 切换图层可见性
 function toggleLayerVisibility(layerId: string) {
-  console.log('切换图层可见性:', layerId);
-  // 检查图层是否已初始化
   if (!isMapInitialized.value) {
     console.warn('地图尚未初始化，无法切换图层');
     return;
@@ -152,7 +150,6 @@ function toggleLayerVisibility(layerId: string) {
   try {
     toggleLayer(layerId);
     layerVisibility.value[layerId] = !layerVisibility.value[layerId];
-    console.log(`图层 ${layerId} 可见性已切换为:`, layerVisibility.value[layerId]);
   } catch (e) {
     console.error('切换图层可见性失败:', e);
   }
@@ -300,14 +297,11 @@ function goBack() {
 
 // 保存地图状态
 function saveMapState() {
-  mapStore.$patch({
-    position: {
-      offsetX: offsetX.value,
-      offsetY: offsetY.value
-    },
+  mapStore.updateViewState({
+    offsetX: offsetX.value,
+    offsetY: offsetY.value,
     scale: scale.value
   });
-  
   worldStore.saveWorldData();
 }
 
@@ -405,29 +399,29 @@ onBeforeUnmount(() => {
             <i class="fas fa-arrow-left"></i>
           </button>
           <button 
-            :class="['tool-btn', { active: activeTool === 'select' }]" 
-            @click="setActiveTool('select')"
-            title="选择工具"
+            :class="['tool-btn', { active: activeTool === 'draw' }]" 
+            @click="setActiveTool('draw')"
+            title="绘制工具"
           >
             <i class="fas fa-mouse-pointer"></i>
           </button>
           <button 
-            :class="['tool-btn', { active: activeTool === 'add' }]" 
-            @click="setActiveTool('add')"
+            :class="['tool-btn', { active: activeTool === 'location' }]" 
+            @click="setActiveTool('location')"
             title="添加位置"
           >
             <i class="fas fa-plus"></i>
           </button>
           <button 
-            :class="['tool-btn', { active: activeTool === 'connect' }]" 
-            @click="setActiveTool('connect')"
+            :class="['tool-btn', { active: activeTool === 'connection' }]" 
+            @click="setActiveTool('connection')"
             title="连接位置"
           >
             <i class="fas fa-project-diagram"></i>
           </button>
           <button 
-            :class="['tool-btn', { active: activeTool === 'delete' }]" 
-            @click="setActiveTool('delete')"
+            :class="['tool-btn', { active: activeTool === 'territory' }]" 
+            @click="setActiveTool('territory')"
             title="删除位置"
           >
             <i class="fas fa-trash"></i>
@@ -569,7 +563,7 @@ onBeforeUnmount(() => {
       </div>
       
       <!-- 位置编辑器 -->
-      <div v-if="currentLocationId && activeTool === 'select'" class="location-editor">
+      <div v-if="currentLocationId && activeTool === 'draw'" class="location-editor">
         <div class="editor-header">
           <h3>位置详情</h3>
           <button class="close-btn" @click="currentLocationId = ''" title="关闭">
