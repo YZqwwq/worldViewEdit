@@ -2,7 +2,7 @@
 import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { useMapCanvas, LAYER_IDS } from '../composables/useMapCanvas';
 import { useMapInteractions } from '../composables/useMapInteractions';
-import type { MapData } from '../types/map';
+import type { WorldMapData } from '../../../types/map';
 
 // 定义属性
 const props = defineProps<{
@@ -13,7 +13,7 @@ const props = defineProps<{
   // 主题
   isDarkMode: boolean;
   // 地图数据
-  mapData: MapData;
+  mapData: WorldMapData;
   // 交互状态
   currentLocationId: string;
   isDrawingConnection: boolean;

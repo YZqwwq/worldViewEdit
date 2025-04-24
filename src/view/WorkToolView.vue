@@ -31,18 +31,31 @@ onMounted(async () => {
     // 确保地图数据已加载
     if (worldStore.worldData?.content?.world_map) {
       const mapData = worldStore.worldData.content.world_map;
-      mapStore.$patch({
-        mapData: {
-          name: mapData.name,
-          description: mapData.description,
-          locations: mapData.locations,
-          connections: mapData.connections
+      
+      // 更新地图数据
+      mapStore.updateMapData({
+        metadata: {
+          version: '1.0.0',
+          name: mapData.name || '',
+          description: mapData.description || '',
+          createdAt: Date.now(),
+          lastModified: Date.now()
         },
-        position: {
-          offsetX: mapData.position.offsetX,
-          offsetY: mapData.position.offsetY
+        viewState: {
+          offsetX: mapData.position?.offsetX || 0,
+          offsetY: mapData.position?.offsetY || 0,
+          scale: mapData.scale || 1,
+          isDarkMode: false
         },
-        scale: mapData.scale
+        editState: {
+          currentTool: 'draw',
+          selectedId: null,
+          isEditing: false
+        },
+        locations: new Map(Object.entries(mapData.locations || {})),
+        connections: new Map(Object.entries(mapData.connections || {})),
+        territories: new Map(Object.entries(mapData.territories || {})),
+        labels: new Map(Object.entries(mapData.labels || {}))
       });
     }
     

@@ -1,6 +1,5 @@
 import { ref, computed } from 'vue';
 import { useMapStore } from '../../../stores/mapStore';
-import type { ViewState } from '../../../types/map';
 import { debounce } from 'lodash';
 
 // 定义基础状态类型
@@ -10,7 +9,7 @@ interface BaseState {
   scale: number;
   isDarkMode: boolean;
   isEditing: boolean;
-  currentTool: string;
+  currentTool: 'draw' | 'territory' | 'location' | 'connection' | 'label';
   layerVisibility: Record<string, boolean>;
 }
 
@@ -34,7 +33,7 @@ export function useMapState() {
     scale: ref(1),
     isDarkMode: ref(false),
     isEditing: ref(false),
-    currentTool: ref('draw'),
+    currentTool: ref<'draw' | 'territory' | 'location' | 'connection' | 'label'>('draw'),
     layerVisibility: ref<Record<string, boolean>>({})
   } as const;
   
@@ -60,13 +59,17 @@ export function useMapState() {
   
   // 3. 状态同步
   const syncToStore = () => {
-    const state: Partial<ViewState> = {
+    mapStore.updateViewState({
       offsetX: baseState.offsetX.value,
       offsetY: baseState.offsetY.value,
       scale: baseState.scale.value,
       isDarkMode: baseState.isDarkMode.value
-    };
-    mapStore.updateViewState(state);
+    });
+    
+    mapStore.updateEditState({
+      currentTool: baseState.currentTool.value,
+      isEditing: baseState.isEditing.value
+    });
   };
   
   // 防抖的状态同步

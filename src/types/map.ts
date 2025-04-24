@@ -1,192 +1,101 @@
-// src/types/map.ts
-
-// 向后兼容
-export interface MapLocation {
-  id: string;
-  name: string;
-  description: string;
-  position: {
-    x: number;
-    y: number;
-  };
-  type: string;
-  connections: string[];
-}
-
-export interface MapConnection {
-  id: string;
-  from: string;
-  to: string;
-  type: string;
-  description: string;
-}
-
-// 旧的MapData接口 - 为了兼容性保留
-export interface MapData {
-  name: string;
-  description: string;
-  locations: MapLocation[];
-  connections: MapConnection[];
-}
-
 // 基础类型
 export interface Position {
-  longitude: number;
-  latitude: number;
+  offsetX: number;
+  offsetY: number;
 }
 
-export interface Metadata {
-  version: string;
-  name: string;
-  description: string;
-  createdAt: number;
-  lastModified: number;
-}
-
-// 地图数据
+// 地图数据 - 整合所有数据结构
 export interface WorldMapData {
-  metadata: Metadata;
-  gridBlocks: Map<string, {
-    elevation: number;
-    terrainType: string;
-    isVisible: boolean;
-  }>;
-  statistics: {
-    highestPoint: number;
-    lowestPoint: number;
-    averageElevation: number;
-    terrainDistribution: Record<string, number>;
+  // 元数据
+  metadata: {
+    version: string; // 版本号
+    name: string; // 地图名称
+    description: string; // 地图描述
+    createdAt: number; // 创建时间
+    lastModified: number; // 最后修改时间
   };
-}
-
-// 势力数据
-export interface TerritoryMapData {
-  metadata: Metadata;
+  
+  // 视图状态
+  viewState: {
+    offsetX: number; // 偏移量x  
+    offsetY: number; // 偏移量y
+    scale: number; // 缩放比例
+    isDarkMode: boolean; // 是否为暗黑模式
+  };
+  
+  // 编辑状态
+  editState: {
+    currentTool: 'draw' | 'territory' | 'location' | 'connection' | 'label'; // 当前工具
+    selectedId: string | null; // 选中的ID
+    isEditing: boolean; // 是否处于编辑状态
+  };
+  
+  // 重要位置数据
+  locations: Map<string, {
+    id: string; // 位置ID
+    name: string; // 位置名称
+    type: string; // 位置类型
+    importance: string; // 位置重要性
+    position: Position; // 位置坐标
+    description: string; // 位置描述
+    territories: string[]; // 位置所属势力
+    isVisible: boolean; // 位置是否可见
+    displayPriority: number; // 位置显示优先级
+    connections: string[]; // 位置连接
+  }>;
+  
+  // 连接数据
+  connections: Map<string, {
+    id: string; // 连接ID
+    start: string; // 起始位置ID
+    end: string; // 终止位置ID
+    type: string; // 连接类型
+    weight: {
+      value: number; // 连接权重
+      description: string; // 连接描述
+    };
+    description: string; // 连接描述
+    isVisible: boolean; // 连接是否可见
+  }>;
+  
+  // 势力数据
   territories: Map<string, {
-    id: string;
-    name: string;
-    type: string;
-    color: string;
-    description: string;
-    members: string[];
+    id: string; // 势力ID
+    name: string; // 势力名称
+    type: string; // 势力类型
+    color: string; // 势力颜色
+    description: string; // 势力描述
+    members: string[]; // 势力成员
     isVisible: boolean;
     displayPriority: number;
   }>;
-  hexGrid: {
-    cells: Map<string, {
-      territoryId: string;
-      level: number;
-      isVisible: boolean;
-    }>;
-    spatialIndex: {
-      byTypeAndLevel: Record<string, string[]>;
-      conflictZones: string[];
+  
+  // 标签数据
+  labels: Map<string, {
+    id: string; // 标签ID
+    type: string; // 标签类型
+    text: string; // 标签文本
+    position: Position; // 标签位置
+    relatedId?: string; // 关联ID
+    isVisible: boolean; // 标签是否可见
+    style: {  
+      fontSize: number; // 字体大小
+      color: string; // 字体颜色
+      backgroundColor?: string; // 背景颜色
+      padding: number; // 内边距
+      borderRadius: number; // 边框圆角
+      borderWidth?: number; // 边框宽度
+      borderColor?: string; // 边框颜色
     };
-  };
-}
-
-// 位置和连线数据
-export interface Location {
-  id: string;
-  name: string;
-  type: string;
-  importance: string;
-  position: Position;
-  description: string;
-  territories: string[];
-  isVisible: boolean;
-  displayPriority: number;
-}
-
-export interface Connection {
-  id: string;
-  start: string;
-  end: string;
-  type: string;
-  weight: {
-    value: number;
-    description: string;
-  };
-  description: string;
-  isVisible: boolean;
-}
-
-export interface LocationMapData {
-  metadata: Metadata;
-  locations: Map<string, Location>;
-  connections: Map<string, Connection>;
-  spatialIndex: {
-    byType: Record<string, string[]>;
-    byImportance: Record<string, string[]>;
-    connectionsByLocation: Map<string, string[]>;
-  };
-}
-
-// 标签数据
-export interface Label {
-  id: string;
-  type: string;
-  text: string;
-  position: Position;
-  relatedId?: string;
-  isVisible: boolean;
-  style: {
-    fontSize: number;
-    color: string;
-    backgroundColor?: string;
-    padding: number;
-    borderRadius: number;
-    borderWidth?: number;
-    borderColor?: string;
-  };
-  metadata: {
-    createdAt: number;
-    lastModified: number;
-    createdBy: string;
-  };
-}
-
-export interface LabelMapData {
-  metadata: Metadata;
-  labels: Map<string, Label>;
-  spatialIndex: {
-    byType: Record<string, string[]>;
-    byPosition: Map<string, string[]>;
-  };
-}
-
-// 视图状态
-export interface ViewState {
-  offsetX: number;
-  offsetY: number;
-  scale: number;
-  isDarkMode: boolean;
-}
-
-// 编辑状态
-export interface EditState {
-  currentTool: 'draw' | 'territory' | 'location' | 'connection' | 'label';
-  selectedId: string | null;
-  isEditing: boolean;
-}
-
-// 缓存状态
-export interface MapCache {
-  mapData: WorldMapData;
-  territoryData: TerritoryMapData;
-  locationData: LocationMapData;
-  labelData: LabelMapData;
-  lastModified: number;
+    metadata: {
+      createdAt: number; // 创建时间
+      lastModified: number; // 最后修改时间
+    };
+  }>;
 }
 
 // 地图状态
 export interface MapState {
   mapData: WorldMapData;
-  territoryData: TerritoryMapData;
-  locationData: LocationMapData;
-  labelData: LabelMapData;
-  viewState: ViewState;
-  editState: EditState;
-  cache: MapCache | null;
   isLoading: boolean;
 }

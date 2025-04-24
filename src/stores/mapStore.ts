@@ -1,99 +1,40 @@
 import { defineStore } from 'pinia';
-import type { 
-  WorldMapData, 
-  TerritoryMapData, 
-  LocationMapData, 
-  LabelMapData,
-  ViewState,
-  EditState,
-  MapState
-} from '../types/map';
+import type { WorldMapData, MapState } from '../types/map';
 
 export const useMapStore = defineStore('map', {
   state: (): MapState => ({
-    // 地图数据 
     mapData: {
+      // 元数据
       metadata: {
         version: '1.0.0',
-        name: '新地图',
+        name: '',
         description: '',
         createdAt: Date.now(),
         lastModified: Date.now()
       },
-      gridBlocks: new Map(),
-      statistics: {
-        highestPoint: 0,
-        lowestPoint: 0,
-        averageElevation: 0,
-        terrainDistribution: {}
-      }
-    },
-    // 势力数据
-    territoryData: {
-      metadata: {
-        version: '1.0.0',
-        name: '势力数据',
-        description: '',
-        createdAt: Date.now(),
-        lastModified: Date.now()
+      
+      // 视图状态
+      viewState: {
+        offsetX: 0,
+        offsetY: 0,
+        scale: 1,
+        isDarkMode: false
       },
-      territories: new Map(),
-      hexGrid: {
-        cells: new Map(),
-        spatialIndex: {
-          byTypeAndLevel: {},
-          conflictZones: []
-        }
-      }
-    },
-    // 位置数据
-    locationData: {
-      metadata: {
-        version: '1.0.0',
-        name: '位置数据',
-        description: '',
-        createdAt: Date.now(),
-        lastModified: Date.now()
+      
+      // 编辑状态
+      editState: {
+        currentTool: 'draw',
+        selectedId: null,
+        isEditing: false
       },
+      
+      // 核心数据
+      // 同类型数据使用Map函数存储
       locations: new Map(),
       connections: new Map(),
-      spatialIndex: {
-        byType: {},
-        byImportance: {},
-        connectionsByLocation: new Map()
-      }
+      territories: new Map(),
+      labels: new Map()
     },
-    // 标签数据
-    labelData: {
-      metadata: {
-        version: '1.0.0',
-        name: '标签数据',
-        description: '',
-        createdAt: Date.now(),
-        lastModified: Date.now()
-      },
-      labels: new Map(),
-      spatialIndex: {
-        byType: {},
-        byPosition: new Map()
-      }
-    },
-
-    viewState: {
-      offsetX: 0,
-      offsetY: 0,
-      scale: 1,
-      isDarkMode: false
-    },
-
-    // 编辑状态
-    editState: {
-      currentTool: 'draw',
-      selectedId: null,
-      isEditing: false
-    },
-
-    cache: null,
     isLoading: false
   }),
   
@@ -103,29 +44,14 @@ export const useMapStore = defineStore('map', {
       this.mapData = { ...this.mapData, ...data };
     },
 
-    // 更新势力数据
-    updateTerritoryData(data: Partial<TerritoryMapData>) {
-      this.territoryData = { ...this.territoryData, ...data };
-    },
-
-    // 更新位置数据
-    updateLocationData(data: Partial<LocationMapData>) {
-      this.locationData = { ...this.locationData, ...data };
-    },
-
-    // 更新标签数据
-    updateLabelData(data: Partial<LabelMapData>) {
-      this.labelData = { ...this.labelData, ...data };
-    },
-
     // 更新视图状态
-    updateViewState(state: Partial<ViewState>) {
-      this.viewState = { ...this.viewState, ...state };
+    updateViewState(state: Partial<WorldMapData['viewState']>) {
+      this.mapData.viewState = { ...this.mapData.viewState, ...state };
     },
 
     // 更新编辑状态
-    updateEditState(state: Partial<EditState>) {
-      this.editState = { ...this.editState, ...state };
+    updateEditState(state: Partial<WorldMapData['editState']>) {
+      this.mapData.editState = { ...this.mapData.editState, ...state };
     },
 
     // 设置位置
@@ -140,11 +66,11 @@ export const useMapStore = defineStore('map', {
 
     // 切换暗色模式
     toggleDarkMode() {
-      this.updateViewState({ isDarkMode: !this.viewState.isDarkMode });
+      this.updateViewState({ isDarkMode: !this.mapData.viewState.isDarkMode });
     },
 
     // 设置当前工具
-    setCurrentTool(tool: EditState['currentTool']) {
+    setCurrentTool(tool: WorldMapData['editState']['currentTool']) {
       this.updateEditState({ currentTool: tool });
     },
 
@@ -156,6 +82,26 @@ export const useMapStore = defineStore('map', {
     // 设置编辑状态
     setIsEditing(isEditing: boolean) {
       this.updateEditState({ isEditing });
+    },
+
+    // 添加位置
+    addLocation(location: WorldMapData['locations'] extends Map<string, infer T> ? T : never) {
+      this.mapData.locations.set(location.id, location);
+    },
+
+    // 添加连接
+    addConnection(connection: WorldMapData['connections'] extends Map<string, infer T> ? T : never) {
+      this.mapData.connections.set(connection.id, connection);
+    },
+
+    // 添加势力
+    addTerritory(territory: WorldMapData['territories'] extends Map<string, infer T> ? T : never) {
+      this.mapData.territories.set(territory.id, territory);
+    },
+
+    // 添加标签
+    addLabel(label: WorldMapData['labels'] extends Map<string, infer T> ? T : never) {
+      this.mapData.labels.set(label.id, label);
     }
   }
 }); 

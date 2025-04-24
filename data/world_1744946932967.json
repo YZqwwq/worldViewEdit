@@ -12,14 +12,39 @@
       }
     },
     "world_map": {
-      "name": "",
+      "version": "1.0.0",
+      "name": "新地图",
       "description": "",
+      "createdAt": 1744946932967,
+      "lastModified": 1744946932967,
+
+      "viewState": {
+        "offsetX": 0,
+        "offsetY": 0,
+      "scale": 1,
+      "isDarkMode": false
+      },
+
+      "editState": {
+        "currentTool": "draw",
+        "selectedId": null,
+        "isEditing": false
+      },
+
       "locations": [
         {
           "id": "loc1",
           "name": "地点A",
-          "x": 100,
-          "y": 150,
+          "type": "city",
+          "importance": "major",
+          "position": {
+            "x": 100,
+            "y": 150
+          },
+          "description": "",
+          "territories": [],
+          "isVisible": true,
+          "displayPriority": 1,
           "connections": [
             "loc2"
           ]
@@ -27,8 +52,16 @@
         {
           "id": "loc2",
           "name": "地点B",
-          "x": 300,
-          "y": 200,
+          "type": "town",
+          "importance": "minor",
+          "position": {
+            "x": 300,
+            "y": 200
+          },
+          "description": "",
+          "territories": [],
+          "isVisible": true,
+          "displayPriority": 1,
           "connections": [
             "loc1"
           ]
@@ -38,14 +71,50 @@
         {
           "id": "conn1",
           "start": "loc1",
-          "end": "loc2"
+          "end": "loc2",
+          "type": "road",
+          "weight": {
+            "value": 1,
+            "description": "普通道路"
+          },
+          "description": "",
+          "isVisible": true
         }
       ],
-      "position": {
-        "offsetX": 59.32000122070315,
-        "offsetY": 51.860012817382824
+      "territoryData": {
+        "id": "terr1",
+        "name": "势力A",
+        "type": "city",
+        "color": "#000000",
+        "description": "",
+        "members": [],
+        "isVisible": true,
+        "displayPriority": 1
       },
-      "scale": 0.09886666870117188
+      "labels": {
+        "id": "label1",
+        "type": "text",
+        "text": "标签A",
+        "position": {
+          "x": 100,
+          "y": 150
+        },
+        "relatedId": null,
+        "isVisible": true,
+        "style": {
+          "fontSize": 12,
+          "color": "#000000",
+          "backgroundColor": "#FFFFFF",
+          "padding": 5,
+          "borderRadius": 5,
+          "borderWidth": 1,
+          "borderColor": "#000000"
+        },
+        "metadata": {
+          "createdAt": 1744946932967,
+          "lastModified": 1744946932967
+        }
+      }
     },
     "character": {
       "ch1": {
