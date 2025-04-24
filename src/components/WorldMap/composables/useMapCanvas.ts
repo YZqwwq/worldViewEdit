@@ -90,7 +90,7 @@ export function useMapCanvas(
     addLayer(mapLayer);
     
     const territoryLayer = createTerritoryLayer(
-      { id: LAYER_IDS.TERRITORY, name: '地域', zIndex: 20 },
+      { id: LAYER_IDS.TERRITORY, name: '地域势力', zIndex: 20 },
       mapData,
       offsetX,
       offsetY,
@@ -122,7 +122,7 @@ export function useMapCanvas(
     addLayer(connectionLayer);
     
     const locationLayer = createLocationLayer(
-      { id: LAYER_IDS.LOCATION, name: '位置', zIndex: 50 },
+      { id: LAYER_IDS.LOCATION, name: '重要位置', zIndex: 50 },
       mapData,
       offsetX,
       offsetY,

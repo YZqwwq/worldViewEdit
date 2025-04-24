@@ -1,0 +1,38 @@
+{
+    "world_map": {
+      "name": "",
+      "description": "",
+      "locations": [
+        {
+          "id": "loc1",
+          "name": "地点A",
+          "x": 100,
+          "y": 150,
+          "connections": [
+            "loc2"
+          ]
+        },
+        {
+          "id": "loc2",
+          "name": "地点B",
+          "x": 300,
+          "y": 200,
+          "connections": [
+            "loc1"
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "id": "conn1",
+          "start": "loc1",
+          "end": "loc2"
+        }
+      ],
+      "position": {
+        "offsetX": 59.32000122070315,
+        "offsetY": 51.860012817382824
+      },
+      "scale": 0.09886666870117188
+    }
+}
