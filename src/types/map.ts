@@ -25,7 +25,7 @@ export interface WorldMapData {
   
   // 编辑状态
   editState: {
-    currentTool: 'draw' | 'territory' | 'location' | 'connection' | 'label'; // 当前工具
+    currentTool: 'mapdraw' | 'territory' | 'location' | 'connection' | 'label' | 'select' ; // 当前工具 先写死方便未来检查
     selectedId: string | null; // 选中的ID
     isEditing: boolean; // 是否处于编辑状态
   };

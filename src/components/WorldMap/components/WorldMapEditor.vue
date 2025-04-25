@@ -3,9 +3,9 @@ import { ref, computed, onMounted, reactive, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import WorldMapCanvas from './WorldMapCanvas.vue';
 import { useMapData } from '../composables/useMapData';
-import { useMapTools } from '../composables/useMapTools';
 import type { WorldMapData } from '../../../types/map';
 import FloatingPanel from './FloatingPanel.vue';
+import DrawToolPanel from './DrawToolPanel.vue';
 
 // 定义事件
 const emit = defineEmits(['error', 'save']);
@@ -18,6 +18,9 @@ const mapData = useMapData();
 
 // 显示状态面板
 const showStatusPanel = ref(true);
+
+// 显示绘图工具面板
+const showDrawToolPanel = computed(() => mapData.getEditState().currentTool === 'mapdraw');
 
 // 获取图层可见性状态
 const layerVisibility = computed(() => mapData.layerVisibility);
@@ -38,12 +41,13 @@ const LayerControl = {
   setup(props: { layerVisibility: Record<string, boolean> }, { emit }: { emit: (event: string, ...args: any[]) => void }) {
     const layers = [
       { id: 'background', name: '背景' },
+      { id: 'mapdraw', name: '地图绘制' },
+      { id: 'territory', name: '区域势力' },
       { id: 'grid', name: '网格' },
-      { id: 'territory', name: '区域' },
-      { id: 'connection', name: '连接' },
-      { id: 'location', name: '位置' },
+      { id: 'location', name: '重要地点' },
+      { id: 'connection', name: '连接线' },
       { id: 'label', name: '标签' },
-      { id: 'coordinate', name: '坐标' }
+      { id: 'coordinate', name: '经纬度标签' }
     ];
     
     return {
@@ -73,9 +77,10 @@ const LayerControl = {
 // 可用的绘图工具
 const availableTools = [
   { id: 'select', name: '选择', tooltip: '选择现有元素' },
-  { id: 'location', name: '位置', tooltip: '添加新位置' },
-  { id: 'connection', name: '连接', tooltip: '添加位置之间的连接' },
-  { id: 'territory', name: '区域', tooltip: '绘制区域' },
+  { id: 'mapdraw', name: '地图绘制', tooltip: '绘制新地图' },
+  { id: 'territory', name: '区域势力', tooltip: '绘制区域势力' },
+  { id: 'location', name: '重要位置', tooltip: '添加新重要位置' },
+  { id: 'connection', name: '连接线', tooltip: '添加位置之间的连接线' },
   { id: 'label', name: '标签', tooltip: '添加文本标签' }
 ];
 
@@ -203,7 +208,7 @@ function handleLocationSelected(id: string) {
 function handleViewStateChanged(newViewState: any) {
   try {
     // 视图状态已经在内部更新，这里可以添加额外处理
-    console.log('视图状态已更新', newViewState);
+    //console.log('视图状态已更新', newViewState);
     
     // 重绘地图
     updateCanvas();
@@ -247,6 +252,22 @@ function goBack() {
   }
 }
 
+// 处理绘图工具变化
+function handleDrawToolChange(event: { tool: string }) {
+  // 这里可以处理绘图工具的变化，比如切换画笔、橡皮擦等
+  console.log('Draw tool changed:', event.tool);
+}
+
+function handleTerrainChange(terrain: string) {
+  // 这里可以处理地形类型的变化
+  console.log('Terrain changed:', terrain);
+}
+
+function handleWidthChange(width: number) {
+  // 这里可以处理线条宽度的变化
+  console.log('Width changed:', width);
+}
+
 // 组件挂载时初始化
 onMounted(() => {
   console.log('WorldMapEditor组件已挂载');
@@ -279,7 +300,23 @@ defineExpose({
 
 <template>
   <div class="world-map-editor">
-    <!-- 工具栏 -->
+    <!-- 主画布 -->
+    <WorldMapCanvas
+      ref="canvasRef"
+      :mapData="mapData"
+      :showCoordinates="true"
+      @error="(msg) => emit('error', msg)"
+    />
+
+    <!-- 绘图工具面板 -->
+    <DrawToolPanel
+      v-if="showDrawToolPanel"
+      @tool-change="handleDrawToolChange"
+      @terrain-change="handleTerrainChange"
+      @width-change="handleWidthChange"
+    />
+
+    <!-- 其他面板 -->
     <div class="editor-toolbar">
       <button 
         @click="toggleEditMode" 

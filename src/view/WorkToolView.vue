@@ -48,7 +48,7 @@ onMounted(async () => {
           isDarkMode: false
         },
         editState: {
-          currentTool: 'draw',
+          currentTool: 'select',
           selectedId: null,
           isEditing: false
         },

@@ -19,8 +19,24 @@ dist-electron
 release
 *.local
 
-# 测试覆盖率
+# 测试相关
 coverage
+test/
+src/test/
+*.spec.ts
+*.test.ts
+__tests__/
+__mocks__/
+test_*.png
+test_*.bin
+*.test.js
+*.test.json
+*.spec.js
+vitest.config.ts
+jest.config.js
+test-results/
+playwright-report/
+cypress/
 
 # Electron 构建输出
 release/
@@ -55,3 +71,5 @@ out/
 
 # 调试文件
 .chrome
+.bin
+.png

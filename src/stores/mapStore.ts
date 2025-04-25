@@ -23,7 +23,7 @@ export const useMapStore = defineStore('map', {
       
       // 编辑状态
       editState: {
-        currentTool: 'draw',
+        currentTool: 'select',
         selectedId: null,
         isEditing: false
       },

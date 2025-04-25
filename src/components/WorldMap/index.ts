@@ -5,7 +5,6 @@
 
 // 直接导入所有组合式API
 import { useMapCanvas } from './composables/useMapCanvas';
-import { useMapTools } from './composables/useMapTools';
 import { useMapInteractions } from './composables/useMapInteractions';
 import { useMapData } from './composables/useMapData';
 
@@ -34,7 +33,6 @@ import * as colors from './constants/colors';
 export {
   // 核心API
   useMapCanvas,
-  useMapTools,
   useMapInteractions,
   useMapData,
   

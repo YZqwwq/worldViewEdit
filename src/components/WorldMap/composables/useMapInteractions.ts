@@ -1,4 +1,4 @@
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import type { Ref } from 'vue';
 import { LAYER_IDS } from './useMapCanvas';
 import { getMapRect } from './useLayerFactory';
@@ -7,7 +7,7 @@ import type { Layer } from './useLayerManager';
 
 /**
  * 地图交互管理器
- * 处理地图的鼠标和键盘交互
+ * 处理地图的指针和键盘交互
  */
 export function useMapInteractions(
   canvasContainerRef: Ref<HTMLElement | null>,
@@ -29,7 +29,7 @@ export function useMapInteractions(
   // 获取地图数据
   const mapData = useMapData();
   
-  // 当前鼠标下的位置ID
+  // 当前指针下的位置ID
   const hoveredLocationId = ref<string | null>(null);
   
   // 检查点是否在位置节点上
@@ -51,7 +51,7 @@ export function useMapInteractions(
     return distance <= radius;
   }
   
-  // 查找鼠标位置下的节点
+  // 查找指针位置下的节点
   function findLocationUnderCursor(x: number, y: number): string | null {
     const locations = mapData.getLocations();
     if (!locations || locations.length === 0) return null;
@@ -91,16 +91,16 @@ export function useMapInteractions(
     return { offsetX: mapX, offsetY: mapY };
   }
   
-  // 处理鼠标按下事件
-  function handleMouseDown(e: MouseEvent) {
-    // 获取鼠标相对于画布容器的坐标
+  // 处理指针按下事件
+  function handlePointerDown(e: PointerEvent) {
+    // 获取指针相对于画布容器的坐标
     const rect = canvasContainerRef.value?.getBoundingClientRect();
     if (!rect) return;
     
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    // 更新鼠标位置
+    // 更新指针位置
     mouseX.value = x;
     mouseY.value = y;
     
@@ -110,9 +110,14 @@ export function useMapInteractions(
     if (!editState) return; 
     
     const currentTool = editState.currentTool;
+    console.log('当前工具', currentTool);
+    // 阻止默认的浏览器拖拽行为等
+    e.preventDefault();
+    // 如果画布容器存在，显式捕获指针事件
+    canvasContainerRef.value?.setPointerCapture(e.pointerId);
     
     // 根据当前工具执行不同操作
-    if (currentTool === 'draw') {
+    if(currentTool === 'select'){
       // 开始拖动
       isDragging.value = true;
       dragStartX.value = x;
@@ -132,7 +137,9 @@ export function useMapInteractions(
         
         drawMap();
       }
-    } else if (currentTool === 'location' && isPointInMap(x, y)) {
+    }else if (currentTool === 'mapdraw') {
+     
+    }else if (currentTool === 'location' && isPointInMap(x, y)) {
       // 添加新位置
       const mapCoords = screenToMapCoords(x, y);
       
@@ -169,12 +176,12 @@ export function useMapInteractions(
       locationNameInput.value = newLocation.name;
       locationDescInput.value = '';
       
-      // 切换到绘图工具
+      // 切换到选择工具
       if (editState) {
         mapData.updateMapData({
           editState: {
             ...editState,
-            currentTool: 'draw'
+            currentTool: 'select'
           }
         });
       }
@@ -307,31 +314,34 @@ export function useMapInteractions(
     }
   }
 
-  // 处理鼠标拖动事件
-  function handleMouseMove(e: MouseEvent) {
-    // 获取鼠标相对于画布容器的坐标
+  // 处理指针移动事件
+  function handlePointerMove(e: PointerEvent) {
+    // 如果没有捕获指针，或者不是主指针（例如多点触控），则忽略
+    if (!canvasContainerRef.value?.hasPointerCapture(e.pointerId)) return;
+
+    // 获取指针相对于画布容器的坐标
     const rect = canvasContainerRef.value?.getBoundingClientRect();
     if (!rect) return;
-    
+
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    
-    // 更新鼠标位置
+
+    // 更新指针位置
     mouseX.value = x;
     mouseY.value = y;
-    
-    // 检查鼠标悬停的位置
+
+    // 检查指针悬停的位置
     hoveredLocationId.value = findLocationUnderCursor(x, y);
-    
+
     // 获取编辑状态
     const editState = mapData.getEditState();
     const viewState = mapData.getViewState();
-    
+
     // 确保编辑状态和视图状态存在
     if (!editState || !viewState) return;
-    
+
     // 如果正在拖动
-    if (isDragging.value && editState.currentTool === 'draw') {
+    if (isDragging.value && editState.currentTool === 'select') {
       // 计算拖动距离
       const dx = x - dragStartX.value;
       const dy = y - dragStartY.value;
@@ -355,81 +365,95 @@ export function useMapInteractions(
     
     // 如果正在绘制连接
     if (isDrawingConnection.value) {
-      const connectionLayer = layers.value.get(LAYER_IDS.CONNECTION);
-      if (connectionLayer && connectionLayer.ctx) {
-        drawActiveConnection(connectionLayer.ctx);
-      }
+      // 更新当前鼠标位置用于绘制活动连接线
+      dragStartX.value = x; // 复用 dragStart X/Y 来存储当前鼠标位置
+      dragStartY.value = y;
+      drawActiveConnection(); // 直接调用，不需要ctx参数
+      // 注意：因为绘制活动连接线需要实时重绘，
+      // drawMap() 可能会被频繁调用，考虑性能优化（例如 requestAnimationFrame）
       drawMap();
     }
   }
   
-  // 处理鼠标抬起事件
-  function handleMouseUp(e: MouseEvent) {
+  // 处理指针抬起事件
+  function handlePointerUp(e: PointerEvent) {
+    // 如果该指针事件没有被捕获，忽略
+    if (!canvasContainerRef.value?.hasPointerCapture(e.pointerId)) return;
+
+    // 释放指针捕获
+    canvasContainerRef.value?.releasePointerCapture(e.pointerId);
+
     isDragging.value = false;
-  }
-  
-  // 处理鼠标点击事件
-  function handleClick(e: MouseEvent) {
-    // 此处可以添加特定的点击处理逻辑
+
+    // 如果是在绘制连接过程中抬起，并且没有在某个点上结束，则取消绘制
+    const x = e.clientX - (canvasContainerRef.value?.getBoundingClientRect()?.left || 0);
+    const y = e.clientY - (canvasContainerRef.value?.getBoundingClientRect()?.top || 0);
+    const locationUnderCursor = findLocationUnderCursor(x, y);
+
+    if (isDrawingConnection.value && (!locationUnderCursor || locationUnderCursor === connectionStartId.value)) {
+      // 如果抬起时不在有效目标点上，或者在起点上，则取消
+      isDrawingConnection.value = false;
+      connectionStartId.value = '';
+      drawMap(); // 清除可能绘制的临时线
+    }
+    // 连接完成的逻辑已经在 handlePointerDown 中处理了第二次点击
   }
   
   // 处理键盘事件
   function handleKeyDown(e: KeyboardEvent) {
     // 获取编辑状态
     const editState = mapData.getEditState();
-    
+    if (!editState) return; // 如果没有编辑状态，直接返回
+
     // Escape键取消当前操作
     if (e.key === 'Escape') {
-      isDrawingConnection.value = false;
-      connectionStartId.value = '';
-      
-      // 更新编辑状态
+      if (isDrawingConnection.value) {
+          isDrawingConnection.value = false;
+          connectionStartId.value = '';
+          drawMap(); // 清除可能绘制的临时线
+      }
+
+      // 总是切换回 select 工具
       mapData.updateMapData({
         editState: {
           ...editState,
-          currentTool: 'draw'
+          currentTool: 'select'
         }
       });
-      
-      drawMap();
+
     }
   }
   
-  // 绘制激活状态的连接线（正在拖动创建的连接）
-  function drawActiveConnection(ctx: CanvasRenderingContext2D) {
-    if (!ctx) return;
-    
-    // 确保连接起点ID存在
-    if (!connectionStartId.value) return;
-    
+  // 绘制激活状态的连接线
+  function drawActiveConnection() {
+    const connectionLayer = layers.value.get(LAYER_IDS.CONNECTION);
+    const ctx = connectionLayer?.ctx;
+    if (!ctx || !isDrawingConnection.value || !connectionStartId.value) return;
+
     const startLocation = mapData.getLocation(connectionStartId.value);
     if (!startLocation || !startLocation.position || !canvasContainerRef.value) return;
-    
-    const rect = canvasContainerRef.value.getBoundingClientRect();
-    const gridSize = 30;
+
     const viewState = mapData.getViewState() || { offsetX: 0, offsetY: 0, scale: 1 };
-    
-    // 计算鼠标的世界坐标
-    const mouseX = (dragStartX.value - rect.left - viewState.offsetX) / viewState.scale;
-    const mouseY = (dragStartY.value - rect.top - viewState.offsetY) / viewState.scale;
-    
-    // 确保坐标在有效范围内
-    const clampedMouseX = Math.max(0, Math.min(360 * gridSize, mouseX));
-    
+
+    // 使用mouseX, mouseY作为当前指针位置
+    // 将屏幕坐标转换为地图坐标（相对于地图内容）
+    const targetMapX = (mouseX.value - viewState.offsetX) / viewState.scale;
+    const targetMapY = (mouseY.value - viewState.offsetY) / viewState.scale;
+
     try {
       ctx.save();
       ctx.translate(viewState.offsetX, viewState.offsetY);
       ctx.scale(viewState.scale, viewState.scale);
-      
-      // 绘制连接线
+
       ctx.beginPath();
       ctx.strokeStyle = 'var(--accent-secondary, #ff9800)';
-      ctx.lineWidth = 2 / viewState.scale;
-      
-      // 直接绘制从起点到鼠标位置的连接线
+      ctx.lineWidth = 2 / viewState.scale; // 线宽反向缩放
+
+      // 从起点位置的地图坐标开始绘制
       ctx.moveTo(startLocation.position.offsetX, startLocation.position.offsetY);
-      ctx.lineTo(clampedMouseX, mouseY);
-      
+      // 绘制到当前鼠标位置的地图坐标
+      ctx.lineTo(targetMapX, targetMapY);
+
       ctx.stroke();
       ctx.restore();
     } catch (error) {
@@ -441,7 +465,7 @@ export function useMapInteractions(
   function handleWheel(e: WheelEvent) {
     e.preventDefault();
     
-    // 获取鼠标相对于画布容器的坐标
+    // 获取指针相对于画布容器的坐标
     const rect = canvasContainerRef.value?.getBoundingClientRect();
     if (!rect) return;
     
@@ -451,17 +475,17 @@ export function useMapInteractions(
     // 获取视图状态
     const viewState = mapData.getViewState();
     
-    // 计算缩放前鼠标位置对应的地图坐标
+    // 计算缩放前指针位置对应的地图坐标
     const mapX = (x - viewState.offsetX) / viewState.scale;
     const mapY = (y - viewState.offsetY) / viewState.scale;
     
     // 计算缩放量，降低灵敏度
-    const delta = -e.deltaY * 0.0002; // 将系数从 0.001 改为 0.0002
+    const delta = -e.deltaY * 0.0002;
     
     // 根据当前缩放级别动态调整缩放步长
     let scaleFactor = 1;
-    if (viewState.scale < 0.2) scaleFactor = 0.2; // 小比例尺时缩放更慢
-    else if (viewState.scale > 0.5) scaleFactor = 5; // 大比例尺时缩放更快
+    if (viewState.scale < 0.2) scaleFactor = 0.2;
+    else if (viewState.scale > 0.5) scaleFactor = 5;
     
     const newScale = Math.max(0.05, Math.min(3, viewState.scale + delta * scaleFactor));
     
@@ -484,11 +508,33 @@ export function useMapInteractions(
     toggleLayer(layerId);
   }
   
+  // 添加和移除事件监听器
+  onMounted(() => {
+    const container = canvasContainerRef.value;
+    if (container) {
+      container.addEventListener('pointerdown', handlePointerDown);
+      container.addEventListener('pointermove', handlePointerMove);
+      container.addEventListener('pointerup', handlePointerUp);
+      container.addEventListener('wheel', handleWheel, { passive: false }); // passive: false for preventDefault
+      window.addEventListener('keydown', handleKeyDown); // Keydown on window
+    }
+  });
+
+  onBeforeUnmount(() => {
+    const container = canvasContainerRef.value;
+    if (container) {
+      container.removeEventListener('pointerdown', handlePointerDown);
+      container.removeEventListener('pointermove', handlePointerMove);
+      container.removeEventListener('pointerup', handlePointerUp);
+      container.removeEventListener('wheel', handleWheel);
+    }
+    window.removeEventListener('keydown', handleKeyDown); // Remove keydown listener
+  });
+  
   return {
-    handleMouseDown,
-    handleMouseMove,
-    handleMouseUp,
-    handleClick,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
     handleKeyDown,
     handleWheel,
     handleToggleLayer,

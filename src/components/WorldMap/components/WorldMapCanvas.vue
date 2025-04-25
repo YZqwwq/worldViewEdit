@@ -108,10 +108,9 @@ const {
 
 // 使用地图交互
 const {
-  handleMouseDown,
-  handleMouseMove,
-  handleMouseUp,
-  handleClick,
+  handlePointerDown,
+  handlePointerMove,
+  handlePointerUp,
   handleKeyDown,
   handleWheel,
   handleToggleLayer,
@@ -182,10 +181,9 @@ defineExpose({
   <div 
     class="world-map-canvas"
     ref="canvasContainerRef"
-    @mousedown="handleMouseDown"
-    @mousemove="handleMouseMove"
-    @mouseup="handleMouseUp"
-    @click="handleClick"
+    @pointerdown="handlePointerDown"
+    @pointermove="handlePointerMove"
+    @pointerup="handlePointerUp"
     @wheel="handleWheel"
   >
     <canvas class="main-canvas"></canvas>
