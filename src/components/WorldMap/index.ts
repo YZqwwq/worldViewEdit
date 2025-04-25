@@ -57,4 +57,4 @@ export {
 };
 
 // 导出类型定义
-export type * from './types/map'; 
+export type * from '../../types/map'; 

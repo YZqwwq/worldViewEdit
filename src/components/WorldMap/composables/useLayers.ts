@@ -11,8 +11,72 @@ import {
   TEXT_DARK,
   TEXT_LIGHT,
   LOCATION_SELECTED,
-  LOCATION_NORMAL
+  LOCATION_NORMAL,
+  BACKGROUND_DARK,
+  BACKGROUND_LIGHT,
+  MAP_BACKGROUND_DARK,
+  MAP_BACKGROUND_LIGHT
 } from '../constants/colors';
+
+// 创建背景图层
+export function createBackgroundLayer(
+  config: LayerConfig,
+  isDarkMode: Ref<boolean>
+): Layer {
+  const baseLayer = createBaseLayer({
+    ...config,
+    isBaseLayer: true
+  });
+
+  // 重写渲染方法
+  baseLayer.render = function(): void {
+    if (!baseLayer.visible.value) return;
+    
+    const ctx = baseLayer.ctx;
+    
+    // 设置背景颜色
+    ctx.fillStyle = isDarkMode.value ? BACKGROUND_DARK : BACKGROUND_LIGHT;
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  };
+
+  return baseLayer;
+}
+
+// 创建地图绘制图层
+export function createMapLayer(
+  config: LayerConfig,
+  isDarkMode: Ref<boolean>,
+  offsetX: Ref<number>,
+  offsetY: Ref<number>,
+  scale: Ref<number>
+): Layer {
+  const baseLayer = createBaseLayer(config);
+
+  // 重写渲染方法
+  baseLayer.render = function(): void {
+    if (!baseLayer.visible.value) return;
+    
+    baseLayer.clear();
+    const ctx = baseLayer.ctx;
+    
+    // 获取地图区域
+    const mapRect = getMapRect(offsetX.value, offsetY.value, scale.value);
+    
+    // 绘制地图背景
+    ctx.save();
+    ctx.fillStyle = isDarkMode.value ? MAP_BACKGROUND_DARK : MAP_BACKGROUND_LIGHT;
+    ctx.fillRect(mapRect.x, mapRect.y, mapRect.width, mapRect.height);
+    
+    // 绘制地图边框
+    ctx.strokeStyle = isDarkMode.value ? '#333333' : '#cccccc';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(mapRect.x, mapRect.y, mapRect.width, mapRect.height);
+    
+    ctx.restore();
+  };
+
+  return baseLayer;
+}
 
 // 创建网格图层
 export function createGridLayer(

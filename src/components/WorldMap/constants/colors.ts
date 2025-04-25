@@ -4,8 +4,8 @@
  */
 
 // 背景颜色
-export const BACKGROUND_DARK = 'rgba(50, 50, 50, 0.8)';
-export const BACKGROUND_LIGHT = 'rgba(200, 200, 200, 0.8)';
+export const BACKGROUND_DARK = '#121212';
+export const BACKGROUND_LIGHT = '#cccccc';
 
 // 地图背景
 export const MAP_BACKGROUND_DARK = '#111111';

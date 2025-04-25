@@ -1,18 +1,15 @@
 import { ref, computed, onMounted, onBeforeUnmount, watchEffect } from 'vue';
 import type { Ref } from 'vue';
 import { useLayerManager } from './useLayerManager';
-import { 
-  createBackgroundLayer, 
-  createMapLayer, 
-  getMapRect 
-} from './useLayerFactory';
 import {
   createGridLayer,
   createConnectionLayer,
   createLocationLayer,
   createTerritoryLayer,
   createLabelLayer,
-  createCoordinateLayer
+  createCoordinateLayer,
+  createBackgroundLayer,
+  createMapLayer
 } from './useLayers';
 
 // 图层ID常量
@@ -75,13 +72,13 @@ export function useMapCanvas(
     
     // 创建并添加各图层 - 按照z-index从低到高的顺序
     const backgroundLayer = createBackgroundLayer(
-      { id: LAYER_IDS.BACKGROUND, name: '背景', zIndex: 0, isBaseLayer: true },
+      { id: LAYER_IDS.BACKGROUND, name: '背景', zIndex: 1, isBaseLayer: true },
       isDarkMode
     );
     addLayer(backgroundLayer);
     
     const mapLayer = createMapLayer(
-      { id: LAYER_IDS.MAP, name: '地图', zIndex: 10 },
+      { id: LAYER_IDS.MAP, name: '地图绘制', zIndex: 10 },
       isDarkMode,
       offsetX,
       offsetY,
