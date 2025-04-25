@@ -3,14 +3,21 @@
  * 导出地图相关的所有模块
  */
 
-// 导出图层管理模块
-export { useLayerManager } from './composables/useLayerManager';
-export { 
+// 直接导入所有组合式API
+import { useMapCanvas } from './composables/useMapCanvas';
+import { useMapTools } from './composables/useMapTools';
+import { useMapInteractions } from './composables/useMapInteractions';
+import { useMapData } from './composables/useMapData';
+
+// 导入图层工厂函数
+import { 
   createBackgroundLayer, 
   createMapLayer, 
   getMapRect 
 } from './composables/useLayerFactory';
-export {
+
+// 导入图层创建函数
+import {
   createGridLayer,
   createConnectionLayer,
   createLocationLayer,
@@ -19,26 +26,37 @@ export {
   createCoordinateLayer
 } from './composables/useLayers';
 
-// 导出地图画布管理模块
-export { 
+// 导入常量
+import { LAYER_IDS, LAYER_GROUPS, type LayerId } from './constants/layerIds';
+import * as colors from './constants/colors';
+
+// 导出所有组合式API
+export {
+  // 核心API
   useMapCanvas,
-  LAYER_IDS
-} from './composables/useMapCanvas';
-
-// 导出地图状态管理模块
-export { useMapState } from './composables/useMapState';
-
-// 导出地图数据管理模块
-export { useMapData } from './composables/useMapData';
-
-// 导出地图工具模块
-export { useMapTools } from './composables/useMapTools';
-
-// 导出地图交互模块
-export { useMapInteractions } from './composables/useMapInteractions';
+  useMapTools,
+  useMapInteractions,
+  useMapData,
+  
+  // 图层工厂函数
+  createBackgroundLayer,
+  createMapLayer,
+  getMapRect,
+  
+  // 图层创建函数
+  createGridLayer,
+  createConnectionLayer,
+  createLocationLayer,
+  createTerritoryLayer,
+  createLabelLayer,
+  createCoordinateLayer,
+  
+  // 常量
+  LAYER_IDS,
+  LAYER_GROUPS,
+  type LayerId,
+  colors
+};
 
 // 导出类型定义
-export type * from './types/map';
-
-// 导出常量
-export * from './constants/colors'; 
+export type * from './types/map'; 

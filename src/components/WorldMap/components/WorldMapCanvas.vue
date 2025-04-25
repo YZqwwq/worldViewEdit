@@ -2,136 +2,90 @@
 import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { useMapCanvas, LAYER_IDS } from '../composables/useMapCanvas';
 import { useMapInteractions } from '../composables/useMapInteractions';
-import type { WorldMapData } from '../../../types/map';
+import { useMapData } from '../composables/useMapData';
+
+// 获取地图数据
+const mapData = useMapData();
 
 // 定义属性
 const props = defineProps<{
-  // 地图状态
-  offsetX: number;
-  offsetY: number;
-  scale: number;
-  // 主题
-  isDarkMode: boolean;
-  // 地图数据
-  mapData: WorldMapData;
-  // 交互状态
-  currentLocationId: string;
-  isDrawingConnection: boolean;
-  connectionStartId: string;
-  isDragging: boolean;
-  dragStartX: number;
-  dragStartY: number;
-  // 编辑状态
-  isEditing: boolean;
-  activeTool: string;
-  // 位置详情
-  locationNameInput: string;
-  locationDescInput: string;
-  // 坐标显示
+  // 显示设置
   showCoordinates: boolean;
-  mouseX: number;
-  mouseY: number;
+  showStatusPanel?: boolean;
 }>();
 
 // 定义事件
 const emit = defineEmits<{
-  (e: 'update:offsetX', value: number): void;
-  (e: 'update:offsetY', value: number): void;
-  (e: 'update:scale', value: number): void;
-  (e: 'update:currentLocationId', value: string): void;
-  (e: 'update:isDrawingConnection', value: boolean): void;
-  (e: 'update:connectionStartId', value: string): void;
-  (e: 'update:isDragging', value: boolean): void;
-  (e: 'update:dragStartX', value: number): void;
-  (e: 'update:dragStartY', value: number): void;
-  (e: 'update:locationNameInput', value: string): void;
-  (e: 'update:locationDescInput', value: string): void;
-  (e: 'update:mouseX', value: number): void;
-  (e: 'update:mouseY', value: number): void;
-  (e: 'update:activeTool', value: string): void;
+  (e: 'locationSelected', id: string): void;
+  (e: 'viewStateChanged', viewState: any): void;
+  (e: 'draw-complete'): void;
+  (e: 'error', message: string): void;
 }>();
 
-// 创建响应式引用，用于双向绑定
-const offsetXRef = computed({
-  get: () => props.offsetX,
-  set: (value) => emit('update:offsetX', value)
+// 创建响应式状态
+const currentLocationId = ref<string>('');
+const isDrawingConnection = ref<boolean>(false);
+const connectionStartId = ref<string>('');
+const isDragging = ref<boolean>(false);
+const dragStartX = ref<number>(0);
+const dragStartY = ref<number>(0);
+const mouseX = ref<number>(0);
+const mouseY = ref<number>(0);
+const locationNameInput = ref<string>('');
+const locationDescInput = ref<string>('');
+
+// 同步位置详情到 mapData
+watch([currentLocationId, locationNameInput, locationDescInput], () => {
+  mapData.currentLocationId.value = currentLocationId.value;
+  mapData.locationNameInput.value = locationNameInput.value;
+  mapData.locationDescInput.value = locationDescInput.value;
 });
 
-const offsetYRef = computed({
-  get: () => props.offsetY,
-  set: (value) => emit('update:offsetY', value)
+// 监听位置选择变化，通知父组件
+watch(currentLocationId, (newId) => {
+  emit('locationSelected', newId);
+  
+  // 如果选择了新位置，获取其详情
+  if (newId) {
+    const location = mapData.getLocation(newId);
+    if (location) {
+      locationNameInput.value = location.name || '';
+      locationDescInput.value = location.description || '';
+    }
+  }
 });
 
-const scaleRef = computed({
-  get: () => props.scale,
-  set: (value) => emit('update:scale', value)
-});
+// 获取视图状态
+const viewState = computed(() => mapData.getViewState());
+const editState = computed(() => mapData.getEditState());
 
-const currentLocationIdRef = computed({
-  get: () => props.currentLocationId,
-  set: (value) => emit('update:currentLocationId', value)
-});
-
-const isDrawingConnectionRef = computed({
-  get: () => props.isDrawingConnection,
-  set: (value) => emit('update:isDrawingConnection', value)
-});
-
-const connectionStartIdRef = computed({
-  get: () => props.connectionStartId,
-  set: (value) => emit('update:connectionStartId', value)
-});
-
-const isDraggingRef = computed({
-  get: () => props.isDragging,
-  set: (value) => emit('update:isDragging', value)
-});
-
-const dragStartXRef = computed({
-  get: () => props.dragStartX,
-  set: (value) => emit('update:dragStartX', value)
-});
-
-const dragStartYRef = computed({
-  get: () => props.dragStartY,
-  set: (value) => emit('update:dragStartY', value)
-});
-
-const locationNameInputRef = computed({
-  get: () => props.locationNameInput,
-  set: (value) => emit('update:locationNameInput', value)
-});
-
-const locationDescInputRef = computed({
-  get: () => props.locationDescInput,
-  set: (value) => emit('update:locationDescInput', value)
-});
-
-const mouseXRef = computed({
-  get: () => props.mouseX,
-  set: (value) => emit('update:mouseX', value)
-});
-
-const mouseYRef = computed({
-  get: () => props.mouseY,
-  set: (value) => emit('update:mouseY', value)
-});
-
-const activeToolRef = computed({
-  get: () => props.activeTool,
-  set: (value) => emit('update:activeTool', value)
-});
-
-// 地图数据处理
-const mapDataRef = ref(props.mapData);
-
-// 监听props变化更新数据
-watch(() => props.mapData, (newValue) => {
-  mapDataRef.value = newValue;
+// 监听视图状态变化，通知父组件
+watch(viewState, (newState) => {
+  emit('viewStateChanged', newState);
 }, { deep: true });
 
 // 创建 canvasContainerRef
 const canvasContainerRef = ref<HTMLElement | null>(null);
+
+// 地图数据对象
+const mapDataObject = computed(() => {
+  // 确保所有获取的数据都经过空值检查
+  const locations = mapData.getLocations() || [];
+  const connections = mapData.getConnections() || [];
+  const territories = mapData.getTerritories() || [];
+  const labels = mapData.getLabels() || [];
+  
+  return {
+    metadata: mapData.getMetadata() || {},
+    // 使用filter确保只有有效的项目才会被添加到Map中
+    locations: new Map(locations.filter(loc => loc && loc.id).map(loc => [loc.id, loc])),
+    connections: new Map(connections.filter(conn => conn && conn.id).map(conn => [conn.id, conn])),
+    territories: new Map(territories.filter(terr => terr && terr.id).map(terr => [terr.id, terr])),
+    labels: new Map(labels.filter(label => label && label.id).map(label => [label.id, label])),
+    viewState: viewState.value || {},
+    editState: editState.value || {}
+  };
+});
 
 // 使用地图画布管理器
 const {
@@ -143,12 +97,12 @@ const {
   toggleLayer,
   layers
 } = useMapCanvas(
-  computed(() => props.isDarkMode),
-  offsetXRef,
-  offsetYRef,
-  scaleRef,
-  mapDataRef,
-  currentLocationIdRef,
+  computed(() => viewState.value.isDarkMode),
+  computed(() => viewState.value.offsetX),
+  computed(() => viewState.value.offsetY),
+  computed(() => viewState.value.scale),
+  mapDataObject,
+  currentLocationId,
   canvasContainerRef
 );
 
@@ -161,47 +115,45 @@ const {
   handleKeyDown,
   handleWheel,
   handleToggleLayer,
-  hoveredLocationId
+  hoveredLocationId,
+  drawActiveConnection
 } = useMapInteractions(
   canvasContainerRef,
-  mapDataRef,
-  isDraggingRef,
-  dragStartXRef,
-  dragStartYRef,
-  offsetXRef,
-  offsetYRef,
-  scaleRef,
-  isDrawingConnectionRef,
-  connectionStartIdRef,
-  currentLocationIdRef,
-  locationNameInputRef,
-  locationDescInputRef,
-  computed(() => props.isEditing),
-  activeToolRef,
-  mouseXRef,
-  mouseYRef,
+  isDragging,
+  dragStartX,
+  dragStartY,
+  isDrawingConnection,
+  connectionStartId,
+  currentLocationId,
+  locationNameInput,
+  locationDescInput,
+  computed(() => editState.value.isEditing),
+  mouseX,
+  mouseY,
   drawMap,
   layers,
   toggleLayer
 );
 
+// 保存位置详情方法
+function saveLocationDetails() {
+  if (!currentLocationId.value) return;
+  
+  // 使用 mapData 的方法保存位置详情
+  mapData.saveLocationDetails();
+}
+
 // 图层控制
-const layerVisibility = ref({
-  [LAYER_IDS.BACKGROUND]: true,
-  [LAYER_IDS.MAP]: true,
-  [LAYER_IDS.TERRITORY]: true,
-  [LAYER_IDS.GRID]: true,
-  [LAYER_IDS.CONNECTION]: true,
-  [LAYER_IDS.LOCATION]: true,
-  [LAYER_IDS.LABEL]: true,
-  [LAYER_IDS.COORDINATE]: true
-});
+const layerVisibility = computed(() => mapData.layerVisibility);
 
 // 切换图层可见性
 function toggleLayerVisibility(layerId: string) {
-  layerVisibility.value[layerId] = !layerVisibility.value[layerId];
-  toggleLayer(layerId, layerVisibility.value[layerId]);
+  mapData.toggleLayerVisibility(layerId);
+  toggleLayer(layerId, mapData.getLayerVisibility(layerId));
 }
+
+// 鼠标坐标
+const coordinates = ref({ x: 0, y: 0 });
 
 // 组件挂载时初始化
 onMounted(() => {
@@ -217,115 +169,67 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeyDown);
 });
+
+// 暴露方法给父组件
+defineExpose({
+  drawMap,
+  initCanvas,
+  handleResize
+});
 </script>
 
 <template>
   <div 
-    ref="canvasContainerRef" 
-    class="map-canvas-container"
+    class="world-map-canvas"
+    ref="canvasContainerRef"
     @mousedown="handleMouseDown"
     @mousemove="handleMouseMove"
     @mouseup="handleMouseUp"
     @click="handleClick"
     @wheel="handleWheel"
   >
-    <!-- 图层控制面板 -->
-    <div class="layer-control" v-if="showCoordinates">
-      <div class="layer-control-title">图层控制</div>
-      <div class="layer-control-items">
-        <div 
-          v-for="[id, layer] in Array.from(layers.entries())" 
-          :key="id" 
-          class="layer-control-item"
-          :class="{ 'active': layerVisibility[id] }"
-          @click="toggleLayerVisibility(id)"
-        >
-          <div class="layer-checkbox">
-            <i class="fas" :class="layerVisibility[id] ? 'fa-check-square' : 'fa-square'"></i>
-          </div>
-          <div class="layer-name">{{ layer.name }}</div>
-        </div>
-      </div>
+    <canvas class="main-canvas"></canvas>
+    
+    <!-- 坐标显示 -->
+    <div v-if="showCoordinates" class="coordinates-display">
+      {{ coordinates.x }}, {{ coordinates.y }}
     </div>
   </div>
 </template>
 
 <style lang="scss" scoped>
-.map-canvas-container {
+.world-map-canvas {
+  position: relative;
   width: 100%;
   height: 100%;
-  position: relative;
   overflow: hidden;
-  
-  .layer-control {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    background-color: rgba(255, 255, 255, 0.8);
-    border-radius: 4px;
-    padding: 8px;
-    z-index: 1000;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    
-    &.dark-mode {
-      background-color: rgba(50, 50, 50, 0.8);
-      color: white;
-    }
-    
-    .layer-control-title {
-      font-weight: bold;
-      margin-bottom: 6px;
-      font-size: 14px;
-    }
-    
-    .layer-control-items {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      
-      .layer-control-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        cursor: pointer;
-        padding: 4px;
-        border-radius: 3px;
-        
-        &:hover {
-          background-color: rgba(0, 0, 0, 0.1);
-        }
-        
-        &.active {
-          color: var(--accent-primary);
-        }
-        
-        .layer-checkbox {
-          width: 16px;
-          text-align: center;
-        }
-        
-        .layer-name {
-          font-size: 12px;
-        }
-      }
-    }
-  }
+  background-color: #f5f5f5;
 }
 
-:root {
-  --accent-primary: #1976d2;
+.main-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
-.dark-mode {
-  .layer-control {
-    background-color: rgba(50, 50, 50, 0.8);
-    color: white;
-    
-    .layer-control-item {
-      &:hover {
-        background-color: rgba(255, 255, 255, 0.1);
-      }
-    }
-  }
+.coordinates-display {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background-color: rgba(255, 255, 255, 0.7);
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: monospace;
+  pointer-events: none;
+}
+
+:deep(.dark-mode) .world-map-canvas {
+  background-color: #1a1a1a;
+}
+
+:deep(.dark-mode) .coordinates-display {
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
 }
 </style> 
