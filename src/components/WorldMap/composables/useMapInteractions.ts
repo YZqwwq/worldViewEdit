@@ -3,7 +3,7 @@ import type { Ref } from 'vue';
 import { LAYER_IDS } from './useMapCanvas';
 import { getMapRect } from './useLayerFactory';
 import { useMapData } from './useMapData';
-import type { Layer } from './useLayerManager';
+import type { Layer } from './useLayerFactory';
 
 /**
  * 地图交互管理器
@@ -135,7 +135,6 @@ export function useMapInteractions(
           locationDescInput.value = location.description || '';
         }
         
-        drawMap();
       }
     }else if (currentTool === 'mapdraw') {
      
@@ -186,7 +185,7 @@ export function useMapInteractions(
         });
       }
       
-      drawMap();
+      // drawMap();
     } else if (currentTool === 'connection') {
       // 连接位置
       const locationId = findLocationUnderCursor(x, y);
@@ -257,7 +256,7 @@ export function useMapInteractions(
           isDrawingConnection.value = false;
           connectionStartId.value = '';
           
-          drawMap();
+          //drawMap();
         }
       }
     } else if (currentTool === 'territory') {
@@ -309,7 +308,7 @@ export function useMapInteractions(
           locationDescInput.value = '';
         }
         
-        drawMap();
+        //drawMap();
       }
     }
   }
@@ -360,7 +359,6 @@ export function useMapInteractions(
       // 更新视图状态
       mapData.updateMapData({ viewState: newViewState });
       
-      drawMap();
     }
     
     // 如果正在绘制连接
@@ -371,7 +369,7 @@ export function useMapInteractions(
       drawActiveConnection(); // 直接调用，不需要ctx参数
       // 注意：因为绘制活动连接线需要实时重绘，
       // drawMap() 可能会被频繁调用，考虑性能优化（例如 requestAnimationFrame）
-      drawMap();
+      // drawMap();
     }
   }
   
@@ -394,7 +392,7 @@ export function useMapInteractions(
       // 如果抬起时不在有效目标点上，或者在起点上，则取消
       isDrawingConnection.value = false;
       connectionStartId.value = '';
-      drawMap(); // 清除可能绘制的临时线
+      // drawMap(); // 清除可能绘制的临时线
     }
     // 连接完成的逻辑已经在 handlePointerDown 中处理了第二次点击
   }
@@ -410,7 +408,7 @@ export function useMapInteractions(
       if (isDrawingConnection.value) {
           isDrawingConnection.value = false;
           connectionStartId.value = '';
-          drawMap(); // 清除可能绘制的临时线
+          // drawMap(); // 清除可能绘制的临时线
       }
 
       // 总是切换回 select 工具
@@ -500,7 +498,6 @@ export function useMapInteractions(
     // 更新视图状态
     mapData.updateMapData({ viewState: newViewState });
     
-    drawMap();
   }
   
   // 切换图层可见性

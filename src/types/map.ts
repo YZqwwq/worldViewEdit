@@ -29,6 +29,7 @@ export interface WorldMapData {
     selectedId: string | null; // 选中的ID
     isEditing: boolean; // 是否处于编辑状态
   };
+
   
   // 重要位置数据
   locations: Map<string, {

@@ -1,6 +1,5 @@
 import type { Ref } from 'vue';
-import type { Layer, LayerConfig } from './useLayerManager';
-import { createBaseLayer, getMapRect } from './useLayerFactory';
+import { createBaseLayer, getMapRect, Layer, LayerConfig } from './useLayerFactory';
 import { 
   GRID_LINE_DARK, 
   GRID_LINE_LIGHT, 

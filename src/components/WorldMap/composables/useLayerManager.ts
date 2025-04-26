@@ -1,33 +1,6 @@
 import { ref, onMounted, onBeforeUnmount, computed, shallowRef } from 'vue';
 import type { Ref } from 'vue';
-
-export interface Layer {
-  id: string;
-  name: string;
-  canvas: HTMLCanvasElement;
-  ctx: CanvasRenderingContext2D;
-  zIndex: number;
-  visible: Ref<boolean>;
-  container: HTMLElement | null;
-  width: number;
-  height: number;
-  isBaseLayer?: boolean;
-  init: (parentElement: HTMLElement, width: number, height: number) => void;
-  resize: (width: number, height: number) => void;
-  render: () => void;
-  clear: () => void;
-  destroy: () => void;
-}
-
-// 图层配置接口
-// 可以传入id,name,zIndex,visible,isBaseLayer(不需要全部传入)
-export interface LayerConfig {
-  id: string;
-  name: string;
-  zIndex: number;
-  visible?: boolean;
-  isBaseLayer?: boolean;
-}
+import type { Layer, LayerConfig, BaseLayer } from './useLayerFactory';
 
 // 创建图层管理器
 export function useLayerManager() {
@@ -95,22 +68,6 @@ export function useLayerManager() {
     }
   }
   
-  // 渲染所有图层
-  function renderAll(): void {
-    Object.values(layerMap.value).forEach(layer => {
-      if (layer.visible.value) {
-        layer.render();
-      }
-    });
-  }
-  
-  // 清空所有图层
-  function clearAll(): void {
-    Object.values(layerMap.value).forEach(layer => {
-      layer.clear();
-    });
-  }
-  
   // 初始化图层管理器
   function initLayerManager(element: HTMLElement): void {
     parentElement.value = element;
@@ -166,6 +123,11 @@ export function useLayerManager() {
     return map;
   });
   
+  // 获取所有图层
+  function getAllLayers(): Layer[] {
+    return Object.values(layerMap.value);
+  }
+  
   return {
     layers,  // 返回图层列表
     parentElement,  // 返回父元素
@@ -178,12 +140,7 @@ export function useLayerManager() {
     hideLayer,  // 隐藏图层
     initLayerManager,  // 初始化图层管理器
     resizeAll,  // 调整所有图层大小
-    renderAll,  // 渲染所有图层
-    clearAll,  // 清空所有图层
-    destroyAll  // 销毁所有图层
+    destroyAll,  // 销毁所有图层
+    getAllLayers
   };
-} 
-
-function type(visible: Ref<boolean, boolean>): any {
-    throw new Error('Function not implemented.');
 }

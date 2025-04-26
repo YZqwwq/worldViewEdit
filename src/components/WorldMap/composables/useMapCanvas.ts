@@ -50,8 +50,7 @@ export function useMapCanvas(
     hideLayer,
     initLayerManager,
     resizeAll,
-    renderAll,
-    clearAll
+    getAllLayers
   } = useLayerManager();
   
   // 计算画布宽高
@@ -148,7 +147,7 @@ export function useMapCanvas(
     addLayer(coordinateLayer);
     
     // 首次渲染所有图层
-    renderAll();
+    drawMap();
   }
   
   // 初始化画布
@@ -186,15 +185,28 @@ export function useMapCanvas(
     resizeAll(containerWidth.value, containerHeight.value);
     
     // 渲染所有图层
-    renderAll();
+    drawMap();
   }
   
+  // 清空所有图层
+  function clearAll() {
+    getAllLayers().forEach(layer => {
+      layer.clear();
+    });
+  }
+
+  // 渲染所有图层
+  function renderAll() {
+    getAllLayers().forEach(layer => {
+      if (layer.visible.value) {
+        layer.render();
+      }
+    });
+  }
+
   // 统一的绘制函数
   function drawMap() {
-    // 清除所有图层
     clearAll();
-    
-    // 渲染所有图层
     renderAll();
   }
   
@@ -217,7 +229,7 @@ export function useMapCanvas(
         }
       }
       // 重新渲染
-      renderAll();
+      drawMap();
     }
   }
   
@@ -240,6 +252,7 @@ export function useMapCanvas(
     ];
     
     // 重绘
+    // 触发了所有的render方法
     drawMap();
   });
   
