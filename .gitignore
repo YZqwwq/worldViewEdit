@@ -9,9 +9,10 @@ lerna-debug.log*
 
 # 依赖
 node_modules
-data
 .pnp
 .pnp.js
+data
+data/worlds.json
 
 # 构建输出
 dist
@@ -30,7 +31,6 @@ __tests__/
 __mocks__/
 test_*.png
 test_*.bin
-worlds.json
 *.test.js
 *.test.json
 *.spec.js
