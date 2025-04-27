@@ -81,7 +81,8 @@ export function useMapCanvas(
       isDarkMode,
       offsetX,
       offsetY,
-      scale
+      scale,
+      '1' // 先写死
     );
     addLayer(mapLayer);
     

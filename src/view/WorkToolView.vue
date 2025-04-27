@@ -19,6 +19,7 @@ const error = ref<string | null>(null);
 // 在组件挂载时加载数据
 onMounted(async () => {
   const id = route.query.id as string;
+  console.log('WorkToolView mounted, id:', id);
   if (!id) {
     error.value = '未找到世界ID';
     return;
@@ -115,6 +116,7 @@ function goToCharacters() {
 function goToWorldView() {
   if (!worldStore.$state.id) {
     error.value = '请先选择一个世界';
+    console.log(worldStore.$state.content.main_setting_of_the_worldview.content.text);
     return;
   }
   router.push({

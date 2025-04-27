@@ -27,6 +27,8 @@ export const useMapStore = defineStore('map', {
         selectedId: null,
         isEditing: false
       },
+
+      mapfiles:[],
       
       // 核心数据
       // 同类型数据使用Map函数存储
@@ -42,6 +44,79 @@ export const useMapStore = defineStore('map', {
     // 更新地图数据
     updateMapData(data: Partial<WorldMapData>) {
       this.mapData = { ...this.mapData, ...data };
+    },
+
+    // 加载地图数据从JSON
+    loadMapDataFromJson(jsonData: any) {
+      // 检查数据格式
+      if (!jsonData) return;
+      
+      // 更新元数据
+      if (jsonData.version) {
+        this.mapData.metadata = {
+          version: jsonData.version || '1.0.0',
+          name: jsonData.name || '',
+          description: jsonData.description || '',
+          createdAt: jsonData.createdAt || Date.now(),
+          lastModified: jsonData.lastModified || Date.now()
+        };
+      }
+      
+      // 更新视图状态
+      if (jsonData.viewState) {
+        this.mapData.viewState = {
+          ...this.mapData.viewState,
+          ...jsonData.viewState
+        };
+      }
+      
+      // 更新编辑状态
+      if (jsonData.editState) {
+        this.mapData.editState = {
+          ...this.mapData.editState,
+          ...jsonData.editState
+        };
+      }
+      
+      // 更新位置数据
+      this.mapData.locations.clear();
+      if (Array.isArray(jsonData.locations)) {
+        jsonData.locations.forEach((loc: any) => {
+          if (loc && loc.id) {
+            this.mapData.locations.set(loc.id, loc);
+          }
+        });
+      }
+      
+      // 更新连接数据
+      this.mapData.connections.clear();
+      if (Array.isArray(jsonData.connections)) {
+        jsonData.connections.forEach((conn: any) => {
+          if (conn && conn.id) {
+            this.mapData.connections.set(conn.id, conn);
+          }
+        });
+      }
+      
+      // 更新领地数据
+      this.mapData.territories.clear();
+      if (Array.isArray(jsonData.territories)) {
+        jsonData.territories.forEach((terr: any) => {
+          if (terr && terr.id) {
+            this.mapData.territories.set(terr.id, terr);
+          }
+        });
+      }
+      
+      // 更新标签数据
+      this.mapData.labels.clear();
+      if (Array.isArray(jsonData.labels)) {
+        jsonData.labels.forEach((label: any) => {
+          if (label && label.id) {
+            this.mapData.labels.set(label.id, label);
+          }
+        });
+      }
     },
 
     // 更新视图状态

@@ -131,6 +131,31 @@ const api = {
     }
     console.log(`文件不存在: ${filePath}`);
     return false;
+  },
+  
+  // 创建文件夹
+  createFolder: async (folderPath) => {
+    try {
+      const fullPath = path.join(dataDir, folderPath);
+      if (!fs.existsSync(fullPath)) {
+        fs.mkdirSync(fullPath, { recursive: true });
+        console.log(`已创建文件夹: ${fullPath}`);
+        return true;
+      }
+      console.log(`文件夹已存在: ${fullPath}`);
+      return true;
+    } catch (error) {
+      console.error(`创建文件夹失败 ${folderPath}:`, error);
+      return false;
+    }
+  },
+  
+  // 检查文件或文件夹是否存在
+  exists: async (filePath) => {
+    const fullPath = path.join(dataDir, filePath);
+    const exists = fs.existsSync(fullPath);
+    console.log(`检查路径是否存在: ${fullPath}, 结果: ${exists}`);
+    return exists;
   }
 };
 

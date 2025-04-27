@@ -172,7 +172,7 @@ function fitWorldView() {
     const worldHeightDegrees = 180;
     
     // 计算适合的缩放比例
-    const gridSize = 30; // 每格30像素
+    const gridSize = 15; // 每格30像素
     const scaleX = containerWidth / (worldWidthDegrees * gridSize);
     const scaleY = containerHeight / (worldHeightDegrees * gridSize);
     

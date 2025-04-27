@@ -1,12 +1,18 @@
-const { app, BrowserWindow, ipcMain, Menu, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog, protocol } = require('electron');
 const path = require('path');
 const url = require('url');
+const fs = require('fs');
+const crypto = require('crypto');
+const net = require('electron').net;
 
 // 确保使用 CommonJS
 process.env.ELECTRON_DISABLE_ESM = '1';
 
 // 保持对window对象的全局引用，避免JavaScript对象被垃圾回收时，窗口被自动关闭
 let mainWindow;
+
+// 定义数据目录
+const dataDir = path.join(process.cwd(), 'data');
 
 // 创建应用菜单
 function createMenu() {
@@ -239,6 +245,34 @@ function createWindow() {
 // 当Electron完成初始化并准备创建浏览器窗口时调用此方法
 app.whenReady().then(() => {
   console.log('Electron应用准备就绪');
+  
+  // 注册自定义协议，用于加载本地资源
+  protocol.handle('app-resource', (request) => {
+    try {
+      const url = request.url.replace('app-resource://', '');
+      const decodedUrl = decodeURI(url);
+      const filePath = path.join(dataDir, decodedUrl);
+      console.log('请求加载资源:', filePath);
+      
+      if (!fs.existsSync(filePath)) {
+        console.error('资源文件不存在:', filePath);
+        return new Response(null, { status: 404 });
+      }
+      
+      const fileStats = fs.statSync(filePath);
+      if (!fileStats.isFile()) {
+        console.error('请求的资源不是文件:', filePath);
+        return new Response(null, { status: 404 });
+      }
+      
+      console.log('成功加载资源:', filePath, '大小:', fileStats.size, '字节');
+      return net.fetch(`file://${filePath}`);
+    } catch (error) {
+      console.error('加载资源失败:', error);
+      return new Response(null, { status: 500 });
+    }
+  });
+  
   createMenu(); // 创建菜单
   createWindow();
 });
@@ -254,5 +288,69 @@ app.on('window-all-closed', function() {
 app.on('activate', function() {
   if (mainWindow === null) {
     createWindow();
+  }
+});
+
+// 处理保存世界观
+ipcMain.handle('world:save', async (event, worldData) => {
+  try {
+    const worldId = worldData.id || crypto.randomUUID();
+    const worldFolderName = `world_${worldId}`;
+    const worldFolderPath = path.join(dataDir, worldFolderName);
+    
+    // 确保世界文件夹存在
+    if (!fs.existsSync(worldFolderPath)) {
+      fs.mkdirSync(worldFolderPath, { recursive: true });
+      
+      // 创建子文件夹
+      const subfolders = ['characters', 'locations', 'events', 'items', 'notes'];
+      for (const folder of subfolders) {
+        fs.mkdirSync(path.join(worldFolderPath, folder), { recursive: true });
+      }
+    }
+    
+    // 设置世界数据
+    if (!worldData.id) {
+      worldData.id = worldId;
+      worldData.createdAt = new Date().toISOString();
+    }
+    
+    worldData.updatedAt = new Date().toISOString();
+    
+    // 保存世界设置文件
+    const worldSettingPath = path.join(worldFolderPath, 'world_setting.json');
+    fs.writeFileSync(worldSettingPath, JSON.stringify(worldData, null, 2));
+    
+    // 更新世界列表
+    let worldsList = [];
+    const worldsListPath = path.join(dataDir, 'worlds.json');
+    
+    if (fs.existsSync(worldsListPath)) {
+      worldsList = JSON.parse(fs.readFileSync(worldsListPath, 'utf8'));
+    }
+    
+    // 查找是否已存在此世界
+    const worldIndex = worldsList.findIndex(world => world.id === worldId);
+    const worldInfo = {
+      id: worldId,
+      name: worldData.name,
+      description: worldData.description || '',
+      createdAt: worldData.createdAt,
+      updatedAt: worldData.updatedAt
+    };
+    
+    if (worldIndex !== -1) {
+      worldsList[worldIndex] = worldInfo;
+    } else {
+      worldsList.push(worldInfo);
+    }
+    
+    // 保存世界列表
+    fs.writeFileSync(worldsListPath, JSON.stringify(worldsList, null, 2));
+    
+    return worldId;
+  } catch (error) {
+    console.error('保存世界观失败:', error);
+    throw error;
   }
 }); 

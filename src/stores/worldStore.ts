@@ -50,6 +50,18 @@ export const useWorldStore = defineStore('world', {
     isDataLoaded(state: WorldState): boolean {
       return !!state.id && !state.isLoading;
     },
+    // 文件夹路径计算属性
+    worldFolderPath(state: WorldState): string {
+      return `world_${state.id}`;
+    },
+    // 设置文件路径计算属性
+    worldSettingPath(state: WorldState): string {
+      return `${this.worldFolderPath}/world_setting.json`;
+    },
+    // 图片目录路径计算属性
+    worldImagesPath(state: WorldState): string {
+      return `${this.worldFolderPath}/images`;
+    }
   },
   
   actions: {
@@ -58,7 +70,20 @@ export const useWorldStore = defineStore('world', {
       this.errorMsg = null;
       try {
         if (window.electronAPI) {
-          const data = await window.electronAPI.data.readFile(`world_${id}.json`);
+          // 修改为新的文件路径
+          const folderPath = `world_${id}`;
+          const settingPath = `${folderPath}/world_setting.json`;
+          
+          // 检查文件夹是否存在，不存在则创建
+          const folderExists = await window.electronAPI.data.exists(folderPath);
+          if (!folderExists) {
+            await window.electronAPI.data.createFolder(folderPath);
+            await window.electronAPI.data.createFolder(`${folderPath}/images`);
+          }
+          
+          // 尝试读取setting文件
+          const data = await window.electronAPI.data.readFile(settingPath);
+          
           if (data) {
             this.$patch({
               id: data.id,
@@ -78,7 +103,7 @@ export const useWorldStore = defineStore('world', {
             const factionsStore = useFactionsStore();
 
             if (data.content.world_map) {
-              mapStore.$patch({ mapData: data.content.world_map });
+              mapStore.loadMapDataFromJson(data.content.world_map);
             }
 
             if (data.content.character) {
@@ -151,22 +176,34 @@ export const useWorldStore = defineStore('world', {
                 }
               },
               world_map: {
-                name: mapStore.mapData.name || '',
-                description: mapStore.mapData.description || '',
-                locations: JSON.parse(JSON.stringify(mapStore.mapData.locations || [])),
-                connections: JSON.parse(JSON.stringify(mapStore.mapData.connections || [])),
-                position: {
-                  offsetX: mapStore.position.offsetX,
-                  offsetY: mapStore.position.offsetY
-                },
-                scale: mapStore.scale
+                // 修复类型错误，引用正确的mapData属性
+                version: mapStore.mapData.metadata?.version || '1.0.0',
+                name: mapStore.mapData.metadata?.name || '',
+                description: mapStore.mapData.metadata?.description || '',
+                createdAt: mapStore.mapData.metadata?.createdAt || Date.now(),
+                lastModified: Date.now(),
+                viewState: mapStore.mapData.viewState,
+                editState: mapStore.mapData.editState,
+                locations: Array.from(mapStore.mapData.locations.values()),
+                connections: Array.from(mapStore.mapData.connections.values()),
+                territories: Array.from(mapStore.mapData.territories.values()),
+                labels: Array.from(mapStore.mapData.labels.values())
               },
               character: JSON.parse(JSON.stringify(characterStore.characters || {})),
               factions: JSON.parse(JSON.stringify(factionsStore.factions || {}))
             }
           };
 
-          await window.electronAPI.data.saveFile(`world_${this.id}.json`, data);
+          // 确保文件夹存在
+          const folderPath = `world_${this.id}`;
+          const folderExists = await window.electronAPI.data.exists(folderPath);
+          if (!folderExists) {
+            await window.electronAPI.data.createFolder(folderPath);
+            await window.electronAPI.data.createFolder(`${folderPath}/images`);
+          }
+          
+          // 保存到新路径
+          await window.electronAPI.data.saveFile(`${folderPath}/world_setting.json`, data);
         }
       } catch (error) {
         console.error('保存世界观数据失败:', error);

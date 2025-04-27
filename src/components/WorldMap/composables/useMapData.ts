@@ -1,7 +1,9 @@
 import { ref, computed, watch } from 'vue';
 import type { WorldMapData } from '../../../types/map';
 import { useMapStore } from '../../../stores/mapStore';
+import { useWorldStore } from '../../../stores/worldStore';
 import { LAYER_IDS } from '../constants/layerIds';
+import WorldEditorView from '../../../view/WorldEditorView.vue';
 
 /**
  * 地图数据管理
@@ -9,9 +11,11 @@ import { LAYER_IDS } from '../constants/layerIds';
  */
 export function useMapData() {
   const mapStore = useMapStore();
+  const worldStore = useWorldStore();
   
   // 1. 数据存储
   const data = {
+    worldId: ref(worldStore.worldData?.id),
     metadata: ref(mapStore.mapData.metadata),
     locations: ref(mapStore.mapData.locations),
     connections: ref(mapStore.mapData.connections),
@@ -34,6 +38,12 @@ export function useMapData() {
   
   // 2. 数据访问方法
   const dataAccess = {
+
+    // 获取世界ID
+    getWorldId() {
+      return data.worldId.value;
+    },
+
     // 获取元数据
     getMetadata() {
       return data.metadata.value;
@@ -389,8 +399,8 @@ export function useMapData() {
     // 视口相关
     viewportTiles: computed(() => {
       return {
-        x: Math.floor(data.viewState.value.offsetX / 30),
-        y: Math.floor(data.viewState.value.offsetY / 30)
+        x: Math.floor(data.viewState.value.offsetX / 15),
+        y: Math.floor(data.viewState.value.offsetY / 15)
       };
     }),
     

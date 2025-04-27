@@ -30,6 +30,7 @@ export interface WorldMapData {
     isEditing: boolean; // 是否处于编辑状态
   };
 
+  mapfiles:string[];
   
   // 重要位置数据
   locations: Map<string, {

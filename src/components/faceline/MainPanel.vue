@@ -34,6 +34,7 @@ onMounted(() => {
   }
   // 加载已有的世界观文件列表
   loadWorldFiles();
+  console.log('世界观文件列表:', worldFiles.value.length);
 });
 
 // 加载世界观文件列表
@@ -64,6 +65,38 @@ async function loadWorldFiles() {
     let worldsList = [];
     try {
       worldsList = await window.electronAPI.data.readFile('worlds.json') || [];
+      
+      // 验证每个世界文件夹是否存在
+      for (let i = 0; i < worldsList.length; i++) {
+        const world = worldsList[i];
+        const folderPath = `world_${world.id}`;
+        const settingPath = `${folderPath}/world_setting.json`;
+        
+        // 检查设置文件是否存在，不存在则尝试创建或迁移
+        try {
+          const folderExists = await window.electronAPI.data.exists(folderPath);
+          if (!folderExists) {
+            // 尝试读取旧格式的文件
+            try {
+              const oldData = await window.electronAPI.data.readFile(`world_${world.id}.json`);
+              if (oldData) {
+                // 创建新格式的文件夹结构
+                await window.electronAPI.data.createFolder(folderPath);
+                await window.electronAPI.data.createFolder(`${folderPath}/images`);
+                // 保存设置文件
+                await window.electronAPI.data.saveFile(settingPath, oldData);
+                // 删除旧文件
+                await window.electronAPI.data.deleteFile(`world_${world.id}.json`);
+                console.log(`世界 ${world.id} 已迁移到新格式`);
+              }
+            } catch (e) {
+              console.warn(`无法迁移世界 ${world.id}:`, e);
+            }
+          }
+        } catch (e) {
+          console.warn(`检查世界 ${world.id} 失败:`, e);
+        }
+      }
     } catch (e) {
       console.log('无世界观列表，创建新列表');
       // 如果文件不存在，保存一个空列表
@@ -205,13 +238,46 @@ async function handleConfirmCreate() {
       createdAt: now,
       updatedAt: now,
       description: '',
-      content: {}
+      content: {
+        main_setting_of_the_worldview: {
+          updatedAt: now,
+          content: {
+            text: ''
+          }
+        },
+        world_map: {
+          version: '1.0.0',
+          name: '',
+          description: '',
+          createdAt: Date.now(),
+          lastModified: Date.now(),
+          viewState: {
+            zoom: 1,
+            center: { x: 0, y: 0 }
+          },
+          editState: {
+            selectedElements: []
+          },
+          locations: [],
+          connections: [],
+          territories: [],
+          labels: []
+        },
+        character: {},
+        factions: {}
+      }
     };
     
     console.log('新建的世界观数据:', JSON.stringify(newWorld));
     
-    // 保存世界观数据到单独文件
-    const filePath = await window.electronAPI.data.saveFile(`world_${id}.json`, newWorld);
+    // 创建世界观文件夹
+    const folderPath = `world_${id}`;
+    await window.electronAPI.data.createFolder(folderPath);
+    await window.electronAPI.data.createFolder(`${folderPath}/images`);
+    
+    // 保存世界观数据到设置文件
+    const settingPath = `${folderPath}/world_setting.json`;
+    const filePath = await window.electronAPI.data.saveFile(settingPath, newWorld);
     console.log('世界观文件已保存到:', filePath);
     
     // 读取世界观列表

@@ -287,7 +287,7 @@ export function createMapLayer(
   // 计算可见瓦片范围
   function calculateVisibleTiles() {
     const tileSize = baseLayer.tileSize;
-    const gridSize = 30; // 每个格子的大小
+    const gridSize =15; // 每个格子的大小
     
     // 计算当前视口下的地图范围
     const mapRect = getMapRect(offsetX.value, offsetY.value, scale.value);
@@ -312,7 +312,7 @@ export function createMapLayer(
     
     if (!tile) {
       const tileSize = baseLayer.tileSize;
-      const gridSize = 30;
+      const gridSize = 15;
       
       // 使用离屏画布生成瓦片
       if (!baseLayer.offscreenCtx) throw new Error('离屏上下文创建失败');
@@ -382,7 +382,7 @@ export function getMapRect(offsetX: number, offsetY: number, scale: number): {
   width: number;
   height: number;
 } {
-  const gridSize = 30;
+  const gridSize = 15;
   const mapWidthInPixels = 360 * gridSize * scale;
   const mapHeightInPixels = 180 * gridSize * scale;
   

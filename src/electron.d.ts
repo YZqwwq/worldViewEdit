@@ -42,6 +42,12 @@ interface ElectronAPI {
     
     // 删除文件
     deleteFile: (filename: string) => Promise<boolean>;
+    
+    // 创建文件夹
+    createFolder: (folderPath: string) => Promise<boolean>;
+    
+    // 检查文件或文件夹是否存在
+    exists: (path: string) => Promise<boolean>;
   },
   
   // 菜单操作接口
