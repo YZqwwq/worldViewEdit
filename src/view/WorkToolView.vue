@@ -43,10 +43,10 @@ onMounted(async () => {
           lastModified: Date.now()
         },
         viewState: {
-          offsetX: mapData.position?.offsetX || 0,
-          offsetY: mapData.position?.offsetY || 0,
-          scale: mapData.scale || 1,
-          isDarkMode: false
+          offsetX: mapData.viewState?.offsetX || 0,
+          offsetY: mapData.viewState?.offsetY || 0,
+          scale: mapData.viewState?.scale || 0.35,
+          isDarkMode: mapData.viewState?.isDarkMode || false
         },
         editState: {
           currentTool: 'select',
@@ -59,6 +59,8 @@ onMounted(async () => {
         labels: new Map(Object.entries(mapData.labels || {}))
       });
     }
+
+    console.log("mapStore,worktoolview",mapStore.mapData.viewState.scale)
     
     // 确保角色数据已加载
     if (worldStore.worldData?.content?.character) {

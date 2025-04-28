@@ -1,5 +1,5 @@
 <template>
-  <FloatingPanel title="绘图工具" :initialX="5" :initialY="60">
+  <FloatingPanel title="绘图工具" :initialX="5" :initialY="60" :showStats="false">
     <div class="draw-tool-panel">
       <!-- 地形类型选择 -->
       <div class="terrain-type">

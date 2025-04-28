@@ -1,3 +1,48 @@
+<template>
+  <div 
+    class="floating-panel"
+    :style="{ 
+      left: x + 'px', 
+      top: y + 'px',
+      width: (typeof width === 'number') ? width + 'px' : width,
+      height: (typeof height === 'number') ? height + 'px' : height
+    }"
+  >
+    <div class="panel-header" @mousedown="startDrag">
+      <h3>{{ title }}</h3>
+      <button class="collapse-btn" @click.stop="toggleCollapse">
+        {{ isCollapsed ? '+' : '-' }}
+      </button>
+    </div>
+    
+    <div v-if="!isCollapsed" class="panel-content">
+      <!-- 自定义内容插槽 -->
+      <slot>
+        <!-- 默认情况下显示数据统计 -->
+        <div v-if="showStats" class="data-stats">
+          <h4>数据统计</h4>
+          <div class="stats-item">
+            <span class="label">位置:</span>
+            <span>{{ stats.locations }}</span>
+          </div>
+          <div class="stats-item">
+            <span class="label">连接:</span>
+            <span>{{ stats.connections }}</span>
+          </div>
+          <div class="stats-item">
+            <span class="label">区域:</span>
+            <span>{{ stats.territories }}</span>
+          </div>
+          <div class="stats-item">
+            <span class="label">标签:</span>
+            <span>{{ stats.labels }}</span>
+          </div>
+        </div>
+      </slot>
+    </div>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useMapData } from '../composables/useMapData';
@@ -9,6 +54,7 @@ const props = defineProps<{
   initialY?: number;
   width?: number;
   height?: number;
+  showStats?: boolean; // 控制是否显示统计信息
 }>();
 
 // 初始位置和尺寸
@@ -23,8 +69,6 @@ const dragOffset = ref({ x: 0, y: 0 });
 
 // 地图数据
 const mapData = useMapData();
-const viewState = ref(mapData.getViewState());
-const editState = ref(mapData.getEditState());
 const stats = ref({
   locations: mapData.getLocations().length,
   connections: mapData.getConnections().length,
@@ -32,87 +76,17 @@ const stats = ref({
   labels: mapData.getLabels().length
 });
 
-// 鼠标位置的经纬度
-const mousePosition = ref({ longitude: 0, latitude: 0 });
-
 // 是否折叠面板
 const isCollapsed = ref(false);
 
 // 更新面板信息
 function updateInfo() {
-  viewState.value = mapData.getViewState();
-  editState.value = mapData.getEditState();
   stats.value = {
     locations: mapData.getLocations().length,
     connections: mapData.getConnections().length,
     territories: mapData.getTerritories().length,
     labels: mapData.getLabels().length
   };
-}
-
-// 更新鼠标位置
-function updateMousePosition(event: MouseEvent) {
-  try {
-    // 获取画布元素
-    const canvas = document.querySelector('.world-map-canvas');
-    if (!canvas) return;
-    
-    // 获取画布相对于视口的位置
-    const rect = canvas.getBoundingClientRect();
-    
-    // 计算鼠标在画布上的相对位置
-    const canvasX = event.clientX - rect.left;
-    const canvasY = event.clientY - rect.top;
-    
-    // 获取当前地图视图状态
-    const viewState = mapData.getViewState();
-    
-    // 参考经纬度标注图层的计算方法
-    const gridSize = 30; // 每格30像素
-    const scaledGridSize = gridSize * viewState.scale;
-    
-    // 计算经纬度
-    // 根据useLayers.ts中的逻辑，地图原点(0,0)对应的是地理坐标上的(经度0,纬度0)
-    // 地图左上角对应经度-180，纬度-90
-    
-    // 计算鼠标位置对应的经纬度值
-    // 原点经度坐标对应画布上的位置
-    const originX = viewState.offsetX + 180 * scaledGridSize; // 经度0度
-    const originY = viewState.offsetY + 90 * scaledGridSize;  // 纬度0度
-    
-    // 计算相对于原点的偏移量，转换为经纬度
-    const longitude = (canvasX - originX) / scaledGridSize;
-    const latitude = -(canvasY - originY) / scaledGridSize; // 注意纬度方向是反的
-    
-    // 格式化经纬度值
-    mousePosition.value = {
-      longitude: parseFloat(longitude.toFixed(2)),
-      latitude: parseFloat(latitude.toFixed(2))
-    };
-    
-  } catch (error) {
-    console.error('计算经纬度时出错:', error);
-  }
-}
-
-// 格式化经度
-function formatLongitude(longitude: number): string {
-  const abs = Math.abs(longitude);
-  if (longitude >= 0) {
-    return `${abs}°E`;
-  } else {
-    return `${abs}°W`;
-  }
-}
-
-// 格式化纬度
-function formatLatitude(latitude: number): string {
-  const abs = Math.abs(latitude);
-  if (latitude >= 0) {
-    return `${abs}°N`;
-  } else {
-    return `${abs}°S`;
-  }
 }
 
 // 开始拖拽
@@ -151,80 +125,19 @@ function toggleCollapse() {
 let updateInterval: number;
 
 onMounted(() => {
-  updateInfo();
-  updateInterval = window.setInterval(updateInfo, 500);
-  
-  // 监听鼠标移动事件
-  document.addEventListener('mousemove', updateMousePosition);
+  // 只有在显示统计信息时才需要更新
+  if (props.showStats) {
+    updateInfo();
+    updateInterval = window.setInterval(updateInfo, 500);
+  }
 });
 
 onBeforeUnmount(() => {
-  clearInterval(updateInterval);
-  
-  // 移除鼠标移动事件监听
-  document.removeEventListener('mousemove', updateMousePosition);
+  if (props.showStats && updateInterval) {
+    clearInterval(updateInterval);
+  }
 });
 </script>
-
-<template>
-  <div 
-    class="floating-panel"
-    :style="{ 
-      left: x + 'px', 
-      top: y + 'px',
-      width: (typeof width === 'number') ? width + 'px' : width,
-      height: (typeof height === 'number') ? height + 'px' : height
-    }"
-  >
-    <div class="panel-header" @mousedown="startDrag">
-      <h3>{{ title }}</h3>
-      <button class="collapse-btn" @click.stop="toggleCollapse">
-        {{ isCollapsed ? '+' : '-' }}
-      </button>
-    </div>
-    
-    <div v-if="!isCollapsed" class="panel-content">
-      <div class="status-info">
-        <div class="status-item">
-          <span class="label">经度:</span>
-          <span>{{ formatLongitude(mousePosition.longitude) }}</span>
-        </div>
-        <div class="status-item">
-          <span class="label">纬度:</span>
-          <span>{{ formatLatitude(mousePosition.latitude) }}</span>
-        </div>
-        <div class="status-item">
-          <span class="label">缩放:</span>
-          <span>{{ viewState.scale.toFixed(2) }}</span>
-        </div>
-        <div class="status-item">
-          <span class="label">模式:</span>
-          <span>{{ editState.isEditing ? '编辑' : '查看' }}</span>
-        </div>
-      </div>
-      
-      <div class="data-stats">
-        <h4>数据统计</h4>
-        <div class="stats-item">
-          <span class="label">位置:</span>
-          <span>{{ stats.locations }}</span>
-        </div>
-        <div class="stats-item">
-          <span class="label">连接:</span>
-          <span>{{ stats.connections }}</span>
-        </div>
-        <div class="stats-item">
-          <span class="label">区域:</span>
-          <span>{{ stats.territories }}</span>
-        </div>
-        <div class="stats-item">
-          <span class="label">标签:</span>
-          <span>{{ stats.labels }}</span>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
 
 <style lang="scss" scoped>
 .floating-panel {
@@ -276,11 +189,7 @@ onBeforeUnmount(() => {
   padding: 12px;
 }
 
-.status-info {
-  margin-bottom: 16px;
-}
-
-.status-item, .stats-item {
+.stats-item {
   display: flex;
   margin-bottom: 6px;
   font-size: 13px;
@@ -326,4 +235,4 @@ onBeforeUnmount(() => {
 :deep(.dark-mode) .data-stats h4 {
   color: #ccc;
 }
-</style> 
+</style>

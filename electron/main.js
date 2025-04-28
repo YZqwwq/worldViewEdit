@@ -182,7 +182,51 @@ function createWindow() {
   const loadUrl = app.isPackaged ? indexPath : 'http://localhost:5178';
   console.log('加载URL:', loadUrl);
   
-  mainWindow.loadURL(loadUrl);
+  // 检测Vite服务器是否正在运行
+  if (!app.isPackaged) {
+    const request = net.request(loadUrl);
+    request.on('response', (response) => {
+      console.log(`Vite服务器可访问，状态码: ${response.statusCode}`);
+      mainWindow.loadURL(loadUrl);
+    });
+    request.on('error', (error) => {
+      console.error(`无法连接到Vite服务器: ${error.message}`);
+      console.log('尝试使用备用端口...');
+      // 尝试其他常见的Vite端口
+      const altPorts = [5173, 3000, 8080, 8000];
+      let portFound = false;
+      
+      for (const port of altPorts) {
+        const altUrl = `http://localhost:${port}`;
+        console.log(`尝试连接: ${altUrl}`);
+        try {
+          const altRequest = net.request(altUrl);
+          altRequest.on('response', (resp) => {
+            if (!portFound) {
+              console.log(`成功连接到: ${altUrl}`);
+              portFound = true;
+              mainWindow.loadURL(altUrl);
+            }
+          });
+          altRequest.on('error', () => {});
+          altRequest.end();
+        } catch (e) {
+          console.error(`尝试端口 ${port} 失败: ${e.message}`);
+        }
+      }
+      
+      // 如果没有找到可用端口，加载离线页面
+      setTimeout(() => {
+        if (!portFound) {
+          console.log('未找到可用的开发服务器，加载打包版本');
+          mainWindow.loadURL(indexPath);
+        }
+      }, 3000);
+    });
+    request.end();
+  } else {
+    mainWindow.loadURL(loadUrl);
+  }
 
   // 打开开发者工具，方便调试
   if (!app.isPackaged) {

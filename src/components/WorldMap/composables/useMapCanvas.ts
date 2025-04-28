@@ -38,20 +38,7 @@ export function useMapCanvas(
   canvasContainerRef: Ref<HTMLElement | null>
 ) {
   // 使用图层管理器
-  const {
-    layers,
-    parentElement,
-    canvasWidth,
-    canvasHeight,
-    addLayer,
-    getLayer,
-    removeLayer,
-    showLayer,
-    hideLayer,
-    initLayerManager,
-    resizeAll,
-    getAllLayers
-  } = useLayerManager();
+  const layerManager = useLayerManager();
   
   // 计算画布宽高
   const containerWidth = ref(0);
@@ -64,221 +51,231 @@ export function useMapCanvas(
       return;
     }
     
-    console.log('初始化多图层地图画布系统');
+    console.log('初始化多图层地图画布系统', canvasContainerRef.value);
     
     // 初始化图层管理器
-    initLayerManager(canvasContainerRef.value);
+    layerManager.initLayerManager(canvasContainerRef.value);
     
-    // 创建并添加各图层 - 按照z-index从低到高的顺序
-    const backgroundLayer = createBackgroundLayer(
-      { id: LAYER_IDS.BACKGROUND, name: '背景', zIndex: 1, isBaseLayer: true },
-      isDarkMode
-    );
-    addLayer(backgroundLayer);
+    console.log('开始创建各图层');
     
-    const mapLayer = createMapLayer(
-      { id: LAYER_IDS.MAP, name: '地图绘制', zIndex: 10 },
-      isDarkMode,
-      offsetX,
-      offsetY,
-      scale,
-      '1' // 先写死
-    );
-    addLayer(mapLayer);
-    
-    const territoryLayer = createTerritoryLayer(
-      { id: LAYER_IDS.TERRITORY, name: '地域势力', zIndex: 20 },
-      mapData,
-      offsetX,
-      offsetY,
-      scale
-    );
-    addLayer(territoryLayer);
-    
-    const gridLayer = createGridLayer(
-      { id: LAYER_IDS.GRID, name: '网格', zIndex: 30 },
-      isDarkMode,
-      offsetX,
-      offsetY,
-      scale
-    );
-    addLayer(gridLayer);
-    
-    const connectionLayer = createConnectionLayer(
-      { id: LAYER_IDS.CONNECTION, name: '连线', zIndex: 40 },
-      mapData,
-      offsetX,
-      offsetY,
-      scale,
-      ref(false),
-      ref(''),
-      ref(0),
-      ref(0),
-      currentLocationId
-    );
-    addLayer(connectionLayer);
-    
-    const locationLayer = createLocationLayer(
-      { id: LAYER_IDS.LOCATION, name: '重要位置', zIndex: 50 },
-      mapData,
-      offsetX,
-      offsetY,
-      scale,
-      currentLocationId
-    );
-    addLayer(locationLayer);
-    
-    const labelLayer = createLabelLayer(
-      { id: LAYER_IDS.LABEL, name: '标签', zIndex: 60 },
-      mapData,
-      offsetX,
-      offsetY,
-      scale,
-      isDarkMode
-    );
-    addLayer(labelLayer);
-    
-    const coordinateLayer = createCoordinateLayer(
-      { id: LAYER_IDS.COORDINATE, name: '坐标', zIndex: 70 },
-      isDarkMode,
-      offsetX,
-      offsetY,
-      scale
-    );
-    addLayer(coordinateLayer);
-    
-    // 首次渲染所有图层
-    drawMap();
+    try {
+      // 批量创建所有图层
+      const layers = [
+        // 背景图层 (z-index: 1)
+        createBackgroundLayer(
+          { id: LAYER_IDS.BACKGROUND, name: '背景', zIndex: 1, isBaseLayer: true },
+          isDarkMode
+        ),
+        
+        // 地图绘制图层 (z-index: 10)
+        createMapLayer(
+          { id: LAYER_IDS.MAP, name: '地图绘制', zIndex: 10 },
+          isDarkMode,
+          offsetX,
+          offsetY,
+          scale,
+          '1' // 先写死
+        ),
+        
+        // 地域势力图层 (z-index: 20)
+        createTerritoryLayer(
+          { id: LAYER_IDS.TERRITORY, name: '地域势力', zIndex: 20 },
+          mapData,
+          offsetX,
+          offsetY,
+          scale
+        ),
+        
+        // 网格图层 (z-index: 30)
+        createGridLayer(
+          { id: LAYER_IDS.GRID, name: '网格', zIndex: 30 },
+          isDarkMode,
+          offsetX,
+          offsetY,
+          scale
+        ),
+        
+        // 连线图层 (z-index: 40)
+        createConnectionLayer(
+          { id: LAYER_IDS.CONNECTION, name: '连线', zIndex: 40 },
+          mapData,
+          offsetX,
+          offsetY,
+          scale,
+          ref(false),
+          ref(''),
+          ref(0),
+          ref(0),
+          currentLocationId
+        ),
+        
+        // 位置标记图层 (z-index: 50)
+        createLocationLayer(
+          { id: LAYER_IDS.LOCATION, name: '重要位置', zIndex: 50 },
+          mapData,
+          offsetX,
+          offsetY,
+          scale,
+          currentLocationId
+        ),
+        
+        // 标签图层 (z-index: 60)
+        createLabelLayer(
+          { id: LAYER_IDS.LABEL, name: '标签', zIndex: 60 },
+          mapData,
+          offsetX,
+          offsetY,
+          scale,
+          isDarkMode
+        ),
+        
+        // 坐标图层 (z-index: 70)
+        createCoordinateLayer(
+          { id: LAYER_IDS.COORDINATE, name: '坐标', zIndex: 70 },
+          isDarkMode,
+          offsetX,
+          offsetY,
+          scale
+        )
+      ];
+      
+      // 批量添加所有图层
+      layerManager.addLayers(layers);
+      console.log(`已批量添加 ${layers.length} 个图层`);
+      
+      // 调试当前图层状态
+      layerManager.debug();
+      
+    } catch (error) {
+      console.error('创建图层时出错:', error);
+    }
+
+    // 全局注册图层管理器，便于调试
+    window.layerManager = layerManager;
   }
   
   // 初始化画布
   function initCanvas() {
     if (!canvasContainerRef.value) {
-      console.error('Canvas容器引用不存在');
+      console.error('Canvas容器引用不存在，无法初始化');
       return;
     }
     
-    console.log('初始化多图层地图画布');
-    
-    // 设置容器样式
-    canvasContainerRef.value.style.position = 'relative';
-    canvasContainerRef.value.style.overflow = 'hidden';
-    canvasContainerRef.value.style.width = '100%';
-    canvasContainerRef.value.style.height = '100%';
+    console.log('initCanvas() 正在初始化画布系统');
     
     // 初始化图层
     initLayers();
-  }
-  
-  // 处理窗口调整大小
-  function handleResize() {
-    if (!canvasContainerRef.value) {
-      console.warn('调整大小时Canvas容器引用不存在');
-      return;
-    }
     
-    // 获取容器尺寸
+    // 设置容器大小
     const rect = canvasContainerRef.value.getBoundingClientRect();
     containerWidth.value = rect.width;
     containerHeight.value = rect.height;
     
-    // 调整所有图层大小
-    resizeAll(containerWidth.value, containerHeight.value);
+    // 添加窗口尺寸变化监听
+    window.addEventListener('resize', handleResize);
     
-    // 渲染所有图层
-    drawMap();
+    // 首次渲染所有图层
+    renderAll();
+    
+    console.log('画布系统初始化完成');
   }
   
-  // 清空所有图层
-  function clearAll() {
-    getAllLayers().forEach(layer => {
-      layer.clear();
-    });
-  }
-
-  // 渲染所有图层
-  function renderAll() {
-    getAllLayers().forEach(layer => {
-      if (layer.visible.value) {
-        layer.render();
-      }
-    });
-  }
-
-  // 统一的绘制函数
-  function drawMap() {
-    clearAll();
+  // 处理窗口尺寸变化
+  function handleResize() {
+    if (!canvasContainerRef.value) {
+      console.warn('Canvas容器引用不存在，无法调整大小');
+      return;
+    }
+    
+    const rect = canvasContainerRef.value.getBoundingClientRect();
+    containerWidth.value = rect.width;
+    containerHeight.value = rect.height;
+    
+    console.log(`调整画布大小: ${rect.width}x${rect.height}`);
+    
+    // 使用图层管理器调整所有图层大小
+    layerManager.resizeAll(rect.width, rect.height);
+    
+    // 重新渲染
     renderAll();
   }
   
-  // 显示/隐藏指定图层
-  function toggleLayer(layerId: string, visible?: boolean) {
-    const layer = getLayer(layerId);
-    if (layer) {
-      if (visible !== undefined) {
-        if (visible) {
-          showLayer(layerId);
-        } else {
-          hideLayer(layerId);
-        }
-      } else {
-        // 切换可见性
-        if (layer.visible.value) {
-          hideLayer(layerId);
-        } else {
-          showLayer(layerId);
-        }
+  // 清除所有图层
+  function clearAll() {
+    Object.values(LAYER_IDS).forEach(id => {
+      const layer = layerManager.getLayer(id);
+      if (layer) {
+        layer.clear();
       }
-      // 重新渲染
-      drawMap();
+    });
+  }
+  
+  // 渲染所有图层
+  function renderAll() {
+    layerManager.renderAll();
+  }
+  
+  // 主要绘制方法
+  function drawMap() {
+    renderAll();
+  }
+  
+  // 切换图层可见性
+  function toggleLayer(layerId: string, visible?: boolean) {
+    layerManager.toggleLayer(layerId, visible);
+    
+    // 获取图层实例并重新渲染
+    const layer = layerManager.getLayer(layerId);
+    if (layer) {
+      if (layer.visible.value) {
+        layer.render();
+      } else {
+        layer.clear();
+      }
+      console.log(`图层 ${layerId} 可见性已切换为 ${layer.visible.value}`);
     }
   }
   
-  // 获取图层可见性状态
+  // 获取图层可见性
   function getLayerVisibility(layerId: string): boolean {
-    const layer = getLayer(layerId);
+    const layer = layerManager.getLayer(layerId);
     return layer ? layer.visible.value : false;
   }
   
-  // 监听状态变化，自动重绘
-  watchEffect(() => {
-    // 依赖监听
-    const deps = [
-      scale.value,
-      offsetX.value,
-      offsetY.value,
-      isDarkMode.value,
-      mapData.value,
-      currentLocationId.value
-    ];
-    
-    // 重绘
-    // 触发了所有的render方法
-    drawMap();
-  });
-  
-  // 监听窗口大小变化
-  onMounted(() => {
-    window.addEventListener('resize', handleResize);
-  });
-  
-  // 移除事件监听器
+  // 销毁和清理
   onBeforeUnmount(() => {
     window.removeEventListener('resize', handleResize);
+    clearAll();
   });
   
+  // 导出接口
   return {
-    canvasContainerRef,
-    canvasWidth: containerWidth,
-    canvasHeight: containerHeight,
-    drawMap,
+    // 基本信息
+    canvasWidth: computed(() => layerManager.canvasWidth.value),
+    canvasHeight: computed(() => layerManager.canvasHeight.value),
+    
+    // 图层相关
+    layers: layerManager.layers,
+    layerManager,
+    LAYER_IDS,
+    
+    // 方法
     initCanvas,
     handleResize,
+    drawMap,
     toggleLayer,
     getLayerVisibility,
-    // 导出所有可用图层
-    layers,
-    // 导出图层常量
-    LAYER_IDS
+    
+    // 工具方法
+    getLayer: layerManager.getLayer,
+    showLayer: layerManager.showLayer,
+    hideLayer: layerManager.hideLayer
   };
+}
+
+// 声明全局接口扩展
+declare global {
+  interface Window {
+    layerManager?: ReturnType<typeof useLayerManager>;
+  }
 } 

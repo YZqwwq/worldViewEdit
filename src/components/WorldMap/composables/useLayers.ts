@@ -48,7 +48,7 @@ export function createBackgroundLayer(
   return baseLayer;
 }
 
-// 创建地图绘制图层（像素瓦片实现）
+// 创建地图绘制图层（双三插值实现）
 export function createMapLayer(
   config: LayerConfig,
   isDarkMode: Ref<boolean>,
@@ -57,231 +57,282 @@ export function createMapLayer(
   scale: Ref<number>,
   mapId: string
 ): Layer {
-  const baseLayer = createBaseLayer(config);
-
-  // 图像缓存
-  const imageRef = ref<HTMLImageElement | null>(null);
-  const isImageLoading = ref(false);
+  console.log(`开始创建地图图层 ID:${config.id}, mapId:${mapId}`);
   
-  // 低分辨率图片缓存
-  const scaledImagesCache: { [scale: string]: HTMLCanvasElement } = {};
-  // 标记渲染请求ID，防止多次渲染竞争
-  let currentRenderRequestId = 0;
-
-  // 预加载图片
-  function preloadImage(): Promise<HTMLImageElement> {
-    if (imageRef.value) return Promise.resolve(imageRef.value);
-    if (isImageLoading.value) {
-      // 如果图片已经在加载中，等待加载完成
-      return new Promise((resolve, reject) => {
-        const checkInterval = setInterval(() => {
-          if (imageRef.value) {
-            clearInterval(checkInterval);
-            resolve(imageRef.value);
-          }
-        }, 100);
-        
-        // 设置超时防止无限等待
-        setTimeout(() => {
-          clearInterval(checkInterval);
-          reject(new Error('图片加载超时'));
-        }, 10000);
-      });
-    }
+  try {
+    const baseLayer = createBaseLayer(config);
+    console.log("基础图层创建成功");
+  
+    // 图像缓存
+    const imageRef = ref<HTMLImageElement | null>(null);
+    const isImageLoading = ref(false);
     
-    isImageLoading.value = true;
-    return new Promise<HTMLImageElement>((resolve, reject) => {
-      const img = new window.Image();
-      const worldId = useMapData().getWorldId();
-      
-      // 先检查文件是否存在
-      const filePath = `world_${worldId}/images/world_${mapId}.png`;
-      console.log('尝试检查图片是否存在:', filePath);
-      
-      window.electronAPI.data.exists(filePath)
-        .then(exists => {
-          console.log(`图片文件 ${filePath} ${exists ? '存在' : '不存在'}`);
-          
-          // 使用自定义协议加载图片
-          if (exists) {
-            img.src = `app-resource://world_${worldId}/images/world_${mapId}.png`;
-            console.log('图片加载路径:', img.src);
-          } else {
-            console.warn(`图片文件 ${filePath} 不存在，使用默认图片`);
-            // 创建一个空白的背景图
-            const canvas = document.createElement('canvas');
-            canvas.width = 1024;
-            canvas.height = 1024;
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              ctx.fillStyle = '#f0f0f0';
-              ctx.fillRect(0, 0, canvas.width, canvas.height);
-              ctx.font = '24px Arial';
-              ctx.fillStyle = '#666666';
-              ctx.textAlign = 'center';
-              ctx.fillText(`地图 ${mapId} 尚未创建`, canvas.width / 2, canvas.height / 2);
-              img.src = canvas.toDataURL('image/png');
+    // 低分辨率图片缓存
+    const scaledImagesCache: { [scale: string]: HTMLCanvasElement } = {};
+    // 标记渲染请求ID，防止多次渲染竞争
+    let currentRenderRequestId = 0;
+
+    // 预加载图片
+    function preloadImage(): Promise<HTMLImageElement> {
+      console.log("预加载图片");
+      if (imageRef.value) return Promise.resolve(imageRef.value);
+      if (isImageLoading.value) {
+        console.log("图片正在加载中，等待完成");
+        // 如果图片已经在加载中，等待加载完成
+        return new Promise((resolve, reject) => {
+          const checkInterval = setInterval(() => {
+            if (imageRef.value) {
+              clearInterval(checkInterval);
+              resolve(imageRef.value);
             }
-          }
+          }, 100);
           
-          img.onload = () => {
-            console.log('图片加载成功:', img.src);
-            imageRef.value = img;
-            isImageLoading.value = false;
-            resolve(img);
-          };
-          
-          img.onerror = (err) => {
-            console.error('图片加载失败:', img.src, err);
-            isImageLoading.value = false;
-            reject(err);
-          };
-        })
-        .catch(err => {
-          console.error('检查文件存在性失败:', err);
-          isImageLoading.value = false;
-          reject(err);
+          // 设置超时防止无限等待
+          setTimeout(() => {
+            clearInterval(checkInterval);
+            reject(new Error('图片加载超时'));
+          }, 10000);
         });
-    });
-  }
-  
-  // 获取或创建缩放版本的图像
-  function getScaledImage(originalImage: HTMLImageElement, targetScale: number): HTMLCanvasElement {
-    // 规范化缩放级别，限制为几个固定值以减少缓存数量
-    let normalizedScale = 1;
-    if (targetScale <= 0.125) normalizedScale = 0.125;
-    else if (targetScale <= 0.25) normalizedScale = 0.25;
-    else if (targetScale <= 0.5) normalizedScale = 0.5;
-    else if (targetScale <= 0.75) normalizedScale = 0.75;
-    
-    const scaleKey = normalizedScale.toString();
-    
-    // 如果已经有缓存，直接返回
-    if (scaledImagesCache[scaleKey]) {
-      return scaledImagesCache[scaleKey];
-    }
-    
-    // 创建新的缩放图像
-    const canvas = document.createElement('canvas');
-    const scaledWidth = Math.floor(originalImage.width * normalizedScale);
-    const scaledHeight = Math.floor(originalImage.height * normalizedScale);
-    canvas.width = scaledWidth;
-    canvas.height = scaledHeight;
-    
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (ctx) {
-      // 使用高质量的图像缩放
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(originalImage, 0, 0, scaledWidth, scaledHeight);
+      }
       
-      // 缓存结果
-      scaledImagesCache[scaleKey] = canvas;
-      return canvas;
-    }
-    
-    // 如果创建失败，返回原始图像尺寸的空白画布
-    const fallbackCanvas = document.createElement('canvas');
-    fallbackCanvas.width = originalImage.width;
-    fallbackCanvas.height = originalImage.height;
-    return fallbackCanvas;
-  }
-
-  // 渲染整个图像而不是瓦片
-  async function renderFullImage(
-    ctx: CanvasRenderingContext2D, 
-    image: HTMLImageElement,
-    viewOffsetX: number,
-    viewOffsetY: number,
-    viewScale: number
-  ) {
-    const requestId = ++currentRenderRequestId;
-    
-    try {
-      // 获取合适缩放级别的图像
-      const sourceImage = viewScale >= 0.75 
-        ? image 
-        : getScaledImage(image, viewScale);
+      isImageLoading.value = true;
+      console.log("开始加载图片");
       
-      // 计算图像在画布上的位置和尺寸
-      const renderWidth = sourceImage.width * viewScale / (sourceImage === image ? 1 : (sourceImage.width / image.width));
-      const renderHeight = sourceImage.height * viewScale / (sourceImage === image ? 1 : (sourceImage.height / image.height));
-      
-      // 检查渲染请求是否仍然有效（可能因为新的缩放/平移操作被取消）
-      if (requestId !== currentRenderRequestId) return;
-      
-      // 清除画布
-      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-      
-      // 设置背景色
-      ctx.fillStyle = isDarkMode.value ? MAP_BACKGROUND_DARK : MAP_BACKGROUND_LIGHT;
-      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-      
-      // 应用双三次插值进行高质量渲染
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      
-      // 渲染图像
-      ctx.drawImage(
-        sourceImage,
-        0, 0, sourceImage.width, sourceImage.height,
-        viewOffsetX, viewOffsetY, renderWidth, renderHeight
-      );
-    } catch (err) {
-      console.error('渲染图像失败:', err);
-      
-      // 如果渲染失败，显示错误信息
-      ctx.fillStyle = isDarkMode.value ? MAP_BACKGROUND_DARK : MAP_BACKGROUND_LIGHT;
-      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-      
-      ctx.font = '20px Arial';
-      ctx.fillStyle = '#ff0000';
-      ctx.textAlign = 'center';
-      ctx.fillText('图像渲染失败', ctx.canvas.width / 2, ctx.canvas.height / 2);
-    }
-  }
-
-  // 重写渲染方法
-  baseLayer.render = async function () {
-    if (!baseLayer.visible.value) return;
-    
-    const ctx = baseLayer.ctx;
-    const currentScale = scale.value;
-    const currentOffsetX = offsetX.value;
-    const currentOffsetY = offsetY.value;
-    
-    try {
-      // 加载原始图像
-      const originalImage = await preloadImage();
-      
-      // 使用新的渲染ID
-      const thisRenderRequest = ++currentRenderRequestId;
-      
-      // 使用requestAnimationFrame确保渲染在下一帧执行
-      requestAnimationFrame(() => {
-        // 检查是否仍然是最新的渲染请求
-        if (thisRenderRequest === currentRenderRequestId) {
-          renderFullImage(ctx, originalImage, currentOffsetX, currentOffsetY, currentScale);
+      return new Promise<HTMLImageElement>((resolve, reject) => {
+        try {
+          const img = new window.Image();
+          const worldId = useMapData().getWorldId();
+          
+          console.log(`加载世界ID: ${worldId}, 地图ID: ${mapId}`);
+          
+          // 先检查文件是否存在
+          const filePath = `world_${worldId}/images/world_${mapId}.png`;
+          console.log(`检查文件存在性: ${filePath}`);
+          
+          window.electronAPI.data.exists(filePath)
+            .then(exists => {
+              console.log(`文件${exists ? '存在' : '不存在'}: ${filePath}`);
+              
+              // 使用自定义协议加载图片
+              if (exists) {
+                img.src = `app-resource://world_${worldId}/images/world_${mapId}.png`;
+                console.log(`设置图片源: ${img.src}`);
+              } else {
+                console.warn(`图片文件 ${filePath} 不存在，使用默认图片`);
+                // 创建一个空白的背景图
+                const canvas = document.createElement('canvas');
+                canvas.width = 1024;
+                canvas.height = 1024;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                  ctx.fillStyle = '#f0f0f0';
+                  ctx.fillRect(0, 0, canvas.width, canvas.height);
+                  ctx.font = '24px Arial';
+                  ctx.fillStyle = '#666666';
+                  ctx.textAlign = 'center';
+                  ctx.fillText(`地图 ${mapId} 尚未创建`, canvas.width / 2, canvas.height / 2);
+                  img.src = canvas.toDataURL('image/png');
+                  console.log("创建了默认图片");
+                }
+              }
+              
+              img.onload = () => {
+                console.log("图片加载成功");
+                imageRef.value = img;
+                isImageLoading.value = false;
+                resolve(img);
+              };
+              
+              img.onerror = (err) => {
+                console.error('图片加载失败:', img.src, err);
+                isImageLoading.value = false;
+                reject(err);
+              };
+            })
+            .catch(err => {
+              console.error('检查文件存在性失败:', err);
+              isImageLoading.value = false;
+              reject(err);
+            });
+        } catch (error) {
+          console.error("预加载图片过程中出错:", error);
+          isImageLoading.value = false;
+          reject(error);
         }
       });
-    } catch (error) {
-      console.error('地图渲染失败:', error);
+    }
+    
+    // 获取或创建缩放版本的图像
+    function getScaledImage(originalImage: HTMLImageElement, targetScale: number): HTMLCanvasElement {
+      // 规范化缩放级别，限制为几个固定值以减少缓存数量
+      let normalizedScale = 1;
+      if (targetScale <= 0.125) normalizedScale = 0.125;
+      else if (targetScale <= 0.25) normalizedScale = 0.25;
+      else if (targetScale <= 0.5) normalizedScale = 0.5;
+      else if (targetScale <= 0.75) normalizedScale = 0.75;
       
-      // 渲染一个简单的错误提示
+      const scaleKey = normalizedScale.toString();
+      
+      // 如果已经有缓存，直接返回
+      if (scaledImagesCache[scaleKey]) {
+        return scaledImagesCache[scaleKey];
+      }
+      
+      // 创建新的缩放图像
+      const canvas = document.createElement('canvas');
+      const scaledWidth = Math.floor(originalImage.width * normalizedScale);
+      const scaledHeight = Math.floor(originalImage.height * normalizedScale);
+      canvas.width = scaledWidth;
+      canvas.height = scaledHeight;
+      
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (ctx) {
+        // 使用高质量的图像缩放
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(originalImage, 0, 0, scaledWidth, scaledHeight);
+        
+        // 缓存结果
+        scaledImagesCache[scaleKey] = canvas;
+        return canvas;
+      }
+      
+      // 如果创建失败，返回原始图像尺寸的空白画布
+      const fallbackCanvas = document.createElement('canvas');
+      fallbackCanvas.width = originalImage.width;
+      fallbackCanvas.height = originalImage.height;
+      return fallbackCanvas;
+    }
+
+    // 渲染整个图像而不是瓦片
+    async function renderFullImage(
+      ctx: CanvasRenderingContext2D, 
+      image: HTMLImageElement,
+      viewOffsetX: number,
+      viewOffsetY: number,
+      viewScale: number
+    ) {
+      const requestId = ++currentRenderRequestId;
+      
+      try {
+        // 获取合适缩放级别的图像
+        const sourceImage = viewScale >= 0.75 
+          ? image 
+          : getScaledImage(image, viewScale);
+        
+        // 计算图像在画布上的位置和尺寸
+        const renderWidth = sourceImage.width * viewScale / (sourceImage === image ? 1 : (sourceImage.width / image.width));
+        const renderHeight = sourceImage.height * viewScale / (sourceImage === image ? 1 : (sourceImage.height / image.height));
+        
+        // 检查渲染请求是否仍然有效（可能因为新的缩放/平移操作被取消）
+        if (requestId !== currentRenderRequestId) return;
+        
+        // 清除画布
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        
+        // 设置背景色
+        ctx.fillStyle = isDarkMode.value ? MAP_BACKGROUND_DARK : MAP_BACKGROUND_LIGHT;
+        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        
+        // 应用双三次插值进行高质量渲染
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // 渲染图像
+        ctx.drawImage(
+          sourceImage,
+          0, 0, sourceImage.width, sourceImage.height,
+          viewOffsetX, viewOffsetY, renderWidth, renderHeight
+        );
+      } catch (err) {
+        console.error('渲染图像失败:', err);
+        
+        // 如果渲染失败，显示错误信息
+        ctx.fillStyle = isDarkMode.value ? MAP_BACKGROUND_DARK : MAP_BACKGROUND_LIGHT;
+        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        
+        ctx.font = '20px Arial';
+        ctx.fillStyle = '#ff0000';
+        ctx.textAlign = 'center';
+        ctx.fillText('图像渲染失败', ctx.canvas.width / 2, ctx.canvas.height / 2);
+      }
+    }
+
+    // 重写渲染方法
+    baseLayer.render = async function () {
+      console.log(`渲染地图图层 ID:${config.id}`);
+      if (!baseLayer.visible.value) {
+        console.log("图层不可见，跳过渲染");
+        return;
+      }
+      
+      const ctx = baseLayer.ctx;
+      const currentScale = scale.value;
+      const currentOffsetX = offsetX.value;
+      const currentOffsetY = offsetY.value;
+      
+      try {
+        // 加载原始图像
+        console.log("尝试加载原始图像");
+        const originalImage = await preloadImage();
+        console.log("原始图像加载成功");
+        
+        // 使用新的渲染ID
+        const thisRenderRequest = ++currentRenderRequestId;
+        
+        // 使用requestAnimationFrame确保渲染在下一帧执行
+        requestAnimationFrame(() => {
+          // 检查是否仍然是最新的渲染请求
+          if (thisRenderRequest === currentRenderRequestId) {
+            console.log("开始渲染图像");
+            renderFullImage(ctx, originalImage, currentOffsetX, currentOffsetY, currentScale);
+          } else {
+            console.log("渲染请求已过期，跳过");
+          }
+        });
+      } catch (error) {
+        console.error('地图渲染失败:', error);
+        
+        // 渲染一个简单的错误提示
+        ctx.fillStyle = isDarkMode.value ? MAP_BACKGROUND_DARK : MAP_BACKGROUND_LIGHT;
+        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        
+        ctx.font = '20px Arial';
+        ctx.fillStyle = '#ff0000';
+        ctx.textAlign = 'center';
+        ctx.fillText('无法加载地图图像', ctx.canvas.width / 2, ctx.canvas.height / 2);
+        
+        // 尝试再次预加载（可能会在下一次渲染中成功）
+        setTimeout(() => {
+          preloadImage().catch(err => console.error('重试预加载图片失败:', err));
+        }, 3000);
+      }
+    };
+
+    // 预加载图像以加快首次渲染
+    console.log("初始预加载图像");
+    preloadImage().catch(err => console.error('预加载图片失败:', err));
+
+    console.log(`地图图层创建完成 ID:${config.id}`);
+    return baseLayer;
+  } catch (error) {
+    console.error("创建地图图层时发生错误:", error);
+    // 返回一个默认图层
+    const fallbackLayer = createBaseLayer(config);
+    fallbackLayer.render = function() {
+      const ctx = fallbackLayer.ctx;
+      if (!ctx) return;
+      
       ctx.fillStyle = isDarkMode.value ? MAP_BACKGROUND_DARK : MAP_BACKGROUND_LIGHT;
       ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
       
       ctx.font = '20px Arial';
       ctx.fillStyle = '#ff0000';
       ctx.textAlign = 'center';
-      ctx.fillText('无法加载地图图像', ctx.canvas.width / 2, ctx.canvas.height / 2);
-    }
-  };
-
-  // 预加载图像以加快首次渲染
-  preloadImage().catch(err => console.error('预加载图片失败:', err));
-
-  return baseLayer;
+      ctx.fillText('地图图层创建失败', ctx.canvas.width / 2, ctx.canvas.height / 2);
+    };
+    return fallbackLayer;
+  }
 }
 
 // 创建网格图层

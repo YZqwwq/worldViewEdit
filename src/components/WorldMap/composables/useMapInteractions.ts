@@ -110,7 +110,6 @@ export function useMapInteractions(
     if (!editState) return; 
     
     const currentTool = editState.currentTool;
-    console.log('当前工具', currentTool);
     // 阻止默认的浏览器拖拽行为等
     e.preventDefault();
     // 如果画布容器存在，显式捕获指针事件
