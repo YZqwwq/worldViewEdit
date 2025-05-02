@@ -1,16 +1,24 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, watch, inject } from 'vue';
 import { useMapCanvas } from '../composables/useMapCanvas';
 import { useMapInteractions } from '../composables/useMapInteractions';
 import { useMapData } from '../composables/useMapData';
 import { useLayerTools, DrawToolType } from '../composables/useLayerTools';
 import { Layer } from '../composables/useLayerFactory';
-import { useWorldMapLayers } from '../composables/useWorldMapLayers';
 import { LAYER_IDS } from '../composables/useMapCanvas';
+import { LAYER_MANAGER_KEY } from '../composables/useLayerManager';
 
 // 获取地图数据
 const mapData = useMapData();
 console.log("mapData", mapData.getViewState().scale)
+
+// 检查是否存在图层管理器
+const layerManagerExists = inject(LAYER_MANAGER_KEY) !== undefined;
+if (!layerManagerExists) {
+  console.warn("WorldMapCanvas: 未找到图层管理器注入，这可能导致图层系统无法正常工作");
+} else {
+  console.log("WorldMapCanvas: 成功获取图层管理器注入");
+}
 
 // 定义属性
 const props = defineProps<{
@@ -94,11 +102,6 @@ const mapDataObject = computed(() => {
   };
 });
 
-// 使用增强的图层系统
-const worldMapLayers = useWorldMapLayers({ 
-  mapId: props.mapId || '1'
-});
-
 // 使用地图画布管理器
 const {
   canvasWidth,
@@ -106,7 +109,6 @@ const {
   drawMap,
   initCanvas,
   handleResize,
-  toggleLayer,
   layers,
   layerManager,
   LAYER_IDS: CANVAS_LAYER_IDS
@@ -127,7 +129,6 @@ const {
   handlePointerUp,
   handleKeyDown,
   handleWheel,
-  handleToggleLayer,
   hoveredLocationId,
   drawActiveConnection
 } = useMapInteractions(
@@ -145,7 +146,6 @@ const {
   mouseY,
   drawMap,
   layers,
-  toggleLayer
 );
 
 // 引用地图图层
@@ -171,7 +171,8 @@ const {
   computed(() => viewState.value.offsetX),
   computed(() => viewState.value.offsetY),
   computed(() => viewState.value.scale),
-  canvasContainerRef
+  canvasContainerRef,
+  layerManager
 );
 
 // 监听绘图工具变化
@@ -189,12 +190,6 @@ function saveLocationDetails() {
 
 // 图层控制
 const layerVisibility = computed(() => mapData.layerVisibility);
-
-// 切换图层可见性
-function toggleLayerVisibility(layerId: string) {
-  mapData.toggleLayerVisibility(layerId);
-  toggleLayer(layerId, mapData.getLayerVisibility(layerId));
-}
 
 // 鼠标坐标
 const coordinates = ref({ x: 0, y: 0 });
@@ -219,47 +214,28 @@ function handleTerrainChange(terrain: string) {
   setTerrainType(terrain);
 }
 
-// 确保在图层就绪后再初始化工具
-watch(layers, (newLayers) => {
-  console.log("图层集合变化", newLayers ? newLayers.size : 0);
-  if (newLayers && newLayers.size > 0) {
-    if (newLayers.has(LAYER_IDS.MAP)) {
-      console.log("图层集合中找到地图图层");
-    }
-  }
-}, { immediate: true, deep: true });
-
 // 组件挂载时初始化
 onMounted(async () => {
-  console.log("WorldMapCanvas 组件挂载");
   window.addEventListener('keydown', handleKeyDown);
   
   // 初始化画布 - 这里会创建所有图层
-  console.log("正在初始化画布...");
   initCanvas();
-  
-  console.log("正在调整大小...");
+  // 调整画布大小
   handleResize();
   
   // 确保图层已经创建完成
-  console.log("正在进行初始渲染...");
   drawMap();
   
   // 给予图层创建时间
-  console.log("等待图层初始化完成...");
   setTimeout(() => {
-    console.log("延迟检查mapLayer:", mapLayerRef.value);
-    console.log("所有图层:", layers.value ? Array.from(layers.value.keys()) : "无图层");
     
     if (mapLayerRef.value) {
-      console.log("mapLayer已就绪，可用于绘图");
       // 手动初始化绘图工具
       initDrawingEvents();
     } else {
       console.warn("mapLayer未就绪，可能影响绘图功能");
       
       // 尝试重新初始化
-      console.log("尝试重新初始化画布...");
       initCanvas();
       handleResize();
       drawMap();
@@ -268,7 +244,7 @@ onMounted(async () => {
       setTimeout(() => {
         console.log("二次检查mapLayer:", mapLayerRef.value);
         if (mapLayerRef.value) {
-          console.log("mapLayer在重新初始化后就绪");
+          // 手动初始化绘图工具
           initDrawingEvents();
         } else {
           console.error("无法加载mapLayer，绘图功能将不可用");
@@ -293,7 +269,7 @@ defineExpose({
   handleTerrainChange,
   undo,
   redo,
-  initDrawingEvents
+  initDrawingEvents,
 });
 </script>
 

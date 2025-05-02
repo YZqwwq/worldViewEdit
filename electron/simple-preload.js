@@ -100,11 +100,9 @@ const api = {
   
   readFile: async (filename) => {
     const filePath = path.join(dataDir, filename);
-    console.log(`[API] 读取文件: ${filePath}`);
     
     if (fs.existsSync(filePath)) {
       const fileContent = fs.readFileSync(filePath, 'utf8');
-      console.log(`[API] 文件存在，内容长度: ${fileContent.length}`);
       
       try {
         return JSON.parse(fileContent);

@@ -1,12 +1,19 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { ref, onMounted, onBeforeUnmount, provide } from 'vue';
 import { useRouter } from 'vue-router';
 import WorldMapEditor from '../components/WorldMap/components/WorldMapEditor.vue';
 import { useMapData } from '../components/WorldMap';
+import { useLayerManager, LAYER_MANAGER_KEY } from '../components/WorldMap/composables/useLayerManager';
 
 // 基础设置
 const router = useRouter();
 const emit = defineEmits(['save']);
+
+// 创建全局唯一的图层管理器实例
+const layerManager = useLayerManager();
+// 提供给所有子组件
+provide(LAYER_MANAGER_KEY, layerManager);
+console.log('WorldMapView: 已创建并提供根级图层管理器实例');
 
 // 地图状态
 const error = ref<string | null>(null);
@@ -33,7 +40,6 @@ function handleSave(data: any) {
     // 向父组件发送保存事件
     emit('save', mapJson);
     
-    console.log('地图数据已保存');
   } catch (e) {
     handleError(`保存地图失败: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -80,6 +86,10 @@ onMounted(async () => {
 // 组件卸载前清理
 onBeforeUnmount(() => {
   console.log('地图视图组件卸载中...');
+  // 确保清理图层管理器
+  if (layerManager) {
+    layerManager.destroyAll();
+  }
 });
 </script>
 

@@ -4,6 +4,7 @@ import { useMapStore } from '../../../stores/mapStore';
 import { useWorldStore } from '../../../stores/worldStore';
 import { LAYER_IDS } from '../constants/layerIds';
 import WorldEditorView from '../../../view/WorldEditorView.vue';
+import { useLayerManagerContext } from './useLayerManager';
 
 /**
  * 地图数据管理
@@ -12,6 +13,15 @@ import WorldEditorView from '../../../view/WorldEditorView.vue';
 export function useMapData() {
   const mapStore = useMapStore();
   const worldStore = useWorldStore();
+  
+  // 获取图层管理器
+  let layerManager: ReturnType<typeof useLayerManagerContext> | undefined;
+  
+  try {
+    layerManager = useLayerManagerContext();
+  } catch (e) {
+    console.warn('无法获取图层管理器上下文，图层可见性将使用本地状态');
+  }
   
   // 1. 数据存储
   const data = {
@@ -38,7 +48,6 @@ export function useMapData() {
   
   // 2. 数据访问方法
   const dataAccess = {
-
     // 获取世界ID
     getWorldId() {
       return data.worldId.value;
@@ -200,61 +209,36 @@ export function useMapData() {
       const territoriesArray = Array.from(data.territories.value.values());
       const labelsArray = Array.from(data.labels.value.values());
       
-      return {
-        version: data.metadata.value.version,
-        name: data.metadata.value.name,
-        description: data.metadata.value.description,
-        createdAt: data.metadata.value.createdAt,
-        lastModified: data.metadata.value.lastModified,
-        
-        viewState: {
-          offsetX: data.viewState.value.offsetX,
-          offsetY: data.viewState.value.offsetY,
-          scale: data.viewState.value.scale,
-          isDarkMode: data.viewState.value.isDarkMode
-        },
-        
-        editState: {
-          currentTool: data.editState.value.currentTool,
-          selectedId: data.editState.value.selectedId,
-          isEditing: data.editState.value.isEditing
-        },
-        
+      // 构建导出对象
+      const exportData = {
+        metadata: data.metadata.value,
         locations: locationsArray,
         connections: connectionsArray,
         territories: territoriesArray,
-        labels: labelsArray
+        labels: labelsArray,
+        version: '1.0'
       };
+      
+      // 转换为 JSON 字符串
+      return JSON.stringify(exportData, null, 2);
     },
     
-    // 从 JSON 数据导入地图
-    importFromJSON(jsonData: any) {
+    // 从 JSON 导入地图数据
+    importFromJSON(jsonData: any): boolean {
       try {
-        // 创建新的地图数据对象
+        // 创建新的地图数据
         const newMapData: Partial<WorldMapData> = {
           metadata: {
-            version: jsonData.version || '1.0.0',
-            name: jsonData.name || '',
-            description: jsonData.description || '',
-            createdAt: jsonData.createdAt || Date.now(),
-            lastModified: jsonData.lastModified || Date.now()
-          },
-          
-          viewState: jsonData.viewState || {
-            offsetX: 0,
-            offsetY: 0,
-            scale: 1,
-            isDarkMode: false
-          },
-          
-          editState: jsonData.editState || {
-            currentTool: 'draw',
-            selectedId: null,
-            isEditing: false
+            name: 'Imported Map',
+            description: 'Imported from JSON',
+            version: '1.0',
+            createdAt: Date.now(),
+            lastModified: Date.now(),
+            ...jsonData.metadata
           }
         };
         
-        // 转换数组到 Map
+        // 转换数组为 Map
         if (jsonData.locations && Array.isArray(jsonData.locations)) {
           const locationsMap = new Map();
           jsonData.locations.forEach((location: any) => {
@@ -331,30 +315,17 @@ export function useMapData() {
     }
   }
   
-  // 5. 从 useMapState 合并的功能 - 图层可见性
-  const layerVisibility = ref<Record<string, boolean>>({
-    [LAYER_IDS.BASE]: true,
-    [LAYER_IDS.GRID]: true,
-    [LAYER_IDS.TERRITORY]: true,
-    [LAYER_IDS.CONNECTION]: true,
-    [LAYER_IDS.MARKER]: true,
-    [LAYER_IDS.LABEL]: true,
-    [LAYER_IDS.COORDINATE]: true,
-    [LAYER_IDS.HEATMAP]: false,
-    [LAYER_IDS.ROUTE]: true,
-    [LAYER_IDS.TEXT]: true,
-    [LAYER_IDS.POLYGON]: true,
+  // 5. 图层可见性 - 使用本地状态备份，方便向layerManager过渡
+  const localLayerVisibility = ref<Record<string, boolean>>({
+    [LAYER_IDS.BASE]: true, // 基础图层
+    [LAYER_IDS.GRID]: true, // 网格图层
+    [LAYER_IDS.MAP]: true, // 地图图层
+    [LAYER_IDS.TERRITORY]: true, // 势力图层
+    [LAYER_IDS.LOCATION]: true, // 位置图层
+    [LAYER_IDS.CONNECTION]: true, // 连接图层
+    [LAYER_IDS.LABEL]: true, // 标签图层
+    [LAYER_IDS.COORDINATE]: true,// 经纬度标注图层
   });
-  
-  // 切换图层可见性
-  function toggleLayerVisibility(layerId: string) {
-    layerVisibility.value[layerId] = !layerVisibility.value[layerId];
-  }
-  
-  // 获取图层可见性
-  function getLayerVisibility(layerId: string): boolean {
-    return layerVisibility.value[layerId] ?? false;
-  }
   
   // 6. 从 useMapState 合并的功能 - 状态更新方法
   const stateUpdateMethods = {
@@ -406,7 +377,10 @@ export function useMapData() {
     
     // 图层相关
     layerBlendResult: computed(() => {
-      return Object.entries(layerVisibility.value)
+      // 使用layerManager如果可用，否则使用本地状态
+      const visibilitySource = layerManager ? layerManager.layerVisibility.value : localLayerVisibility.value;
+      
+      return Object.entries(visibilitySource)
         .filter(([_, visible]) => visible)
         .map(([id]) => id);
     }),
@@ -431,6 +405,27 @@ export function useMapData() {
     })
   };
   
+  // 创建适配函数，优先使用layerManager的方法，如果不可用则使用本地状态
+  function toggleLayerVisibility(layerId: string) {
+    if (layerManager) {
+      layerManager.toggleLayer(layerId);
+    } else {
+      localLayerVisibility.value[layerId] = !localLayerVisibility.value[layerId];
+    }
+  }
+  
+  function getLayerVisibility(layerId: string): boolean {
+    if (layerManager) {
+      return layerManager.getLayerVisibility(layerId);
+    } else {
+      return localLayerVisibility.value[layerId] ?? false;
+    }
+  }
+  
+  const layerVisibility = computed(() => {
+    return layerManager ? layerManager.layerVisibility.value : localLayerVisibility.value;
+  });
+  
   return {
     // 数据访问方法
     ...dataAccess,
@@ -445,7 +440,7 @@ export function useMapData() {
     currentLocation,
     saveLocationDetails,
     
-    // 从 useMapState 合并的功能
+    // 图层可见性
     layerVisibility,
     toggleLayerVisibility,
     getLayerVisibility,

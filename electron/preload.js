@@ -108,18 +108,12 @@ const worldAPI = {
   
   getWorldData: async (id) => {
     try {
-      log(`获取世界观数据，ID: ${id}`);
       const store = new Store({
         name: `world_${id}`,
         cwd: storeDir
       });
       
       const data = store.get('data');
-      if (data) {
-        log(`获取世界观数据成功: ${data.name}`);
-      } else {
-        log(`未找到世界观数据: ${id}`);
-      }
       return data;
     } catch (error) {
       log(`获取世界观数据失败: ${error.message}`);

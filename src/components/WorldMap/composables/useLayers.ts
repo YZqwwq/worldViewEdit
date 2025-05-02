@@ -57,11 +57,9 @@ export function createMapLayer(
   scale: Ref<number>,
   mapId: string
 ): Layer {
-  console.log(`开始创建地图图层 ID:${config.id}, mapId:${mapId}`);
   
   try {
     const baseLayer = createBaseLayer(config);
-    console.log("基础图层创建成功");
   
     // 图像缓存
     const imageRef = ref<HTMLImageElement | null>(null);
@@ -74,10 +72,8 @@ export function createMapLayer(
 
     // 预加载图片
     function preloadImage(): Promise<HTMLImageElement> {
-      console.log("预加载图片");
       if (imageRef.value) return Promise.resolve(imageRef.value);
       if (isImageLoading.value) {
-        console.log("图片正在加载中，等待完成");
         // 如果图片已经在加载中，等待加载完成
         return new Promise((resolve, reject) => {
           const checkInterval = setInterval(() => {
@@ -96,27 +92,21 @@ export function createMapLayer(
       }
       
       isImageLoading.value = true;
-      console.log("开始加载图片");
       
       return new Promise<HTMLImageElement>((resolve, reject) => {
         try {
           const img = new window.Image();
           const worldId = useMapData().getWorldId();
           
-          console.log(`加载世界ID: ${worldId}, 地图ID: ${mapId}`);
-          
           // 先检查文件是否存在
           const filePath = `world_${worldId}/images/world_${mapId}.png`;
-          console.log(`检查文件存在性: ${filePath}`);
           
           window.electronAPI.data.exists(filePath)
             .then(exists => {
-              console.log(`文件${exists ? '存在' : '不存在'}: ${filePath}`);
               
               // 使用自定义协议加载图片
               if (exists) {
                 img.src = `app-resource://world_${worldId}/images/world_${mapId}.png`;
-                console.log(`设置图片源: ${img.src}`);
               } else {
                 console.warn(`图片文件 ${filePath} 不存在，使用默认图片`);
                 // 创建一个空白的背景图
@@ -132,12 +122,10 @@ export function createMapLayer(
                   ctx.textAlign = 'center';
                   ctx.fillText(`地图 ${mapId} 尚未创建`, canvas.width / 2, canvas.height / 2);
                   img.src = canvas.toDataURL('image/png');
-                  console.log("创建了默认图片");
                 }
               }
               
               img.onload = () => {
-                console.log("图片加载成功");
                 imageRef.value = img;
                 isImageLoading.value = false;
                 resolve(img);
@@ -150,7 +138,6 @@ export function createMapLayer(
               };
             })
             .catch(err => {
-              console.error('检查文件存在性失败:', err);
               isImageLoading.value = false;
               reject(err);
             });
@@ -230,10 +217,6 @@ export function createMapLayer(
         // 清除画布
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
         
-        // 设置背景色
-        ctx.fillStyle = isDarkMode.value ? MAP_BACKGROUND_DARK : MAP_BACKGROUND_LIGHT;
-        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        
         // 应用双三次插值进行高质量渲染
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
@@ -248,8 +231,7 @@ export function createMapLayer(
         console.error('渲染图像失败:', err);
         
         // 如果渲染失败，显示错误信息
-        ctx.fillStyle = isDarkMode.value ? MAP_BACKGROUND_DARK : MAP_BACKGROUND_LIGHT;
-        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
         
         ctx.font = '20px Arial';
         ctx.fillStyle = '#ff0000';
@@ -260,9 +242,8 @@ export function createMapLayer(
 
     // 重写渲染方法
     baseLayer.render = async function () {
-      console.log(`渲染地图图层 ID:${config.id}`);
       if (!baseLayer.visible.value) {
-        console.log("图层不可见，跳过渲染");
+        console.log("地图图层不可见，跳过渲染");
         return;
       }
       
@@ -273,9 +254,7 @@ export function createMapLayer(
       
       try {
         // 加载原始图像
-        console.log("尝试加载原始图像");
         const originalImage = await preloadImage();
-        console.log("原始图像加载成功");
         
         // 使用新的渲染ID
         const thisRenderRequest = ++currentRenderRequestId;
@@ -284,18 +263,13 @@ export function createMapLayer(
         requestAnimationFrame(() => {
           // 检查是否仍然是最新的渲染请求
           if (thisRenderRequest === currentRenderRequestId) {
-            console.log("开始渲染图像");
             renderFullImage(ctx, originalImage, currentOffsetX, currentOffsetY, currentScale);
-          } else {
-            console.log("渲染请求已过期，跳过");
           }
         });
       } catch (error) {
-        console.error('地图渲染失败:', error);
         
         // 渲染一个简单的错误提示
-        ctx.fillStyle = isDarkMode.value ? MAP_BACKGROUND_DARK : MAP_BACKGROUND_LIGHT;
-        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
         
         ctx.font = '20px Arial';
         ctx.fillStyle = '#ff0000';
@@ -313,7 +287,6 @@ export function createMapLayer(
     console.log("初始预加载图像");
     preloadImage().catch(err => console.error('预加载图片失败:', err));
 
-    console.log(`地图图层创建完成 ID:${config.id}`);
     return baseLayer;
   } catch (error) {
     console.error("创建地图图层时发生错误:", error);
@@ -323,8 +296,7 @@ export function createMapLayer(
       const ctx = fallbackLayer.ctx;
       if (!ctx) return;
       
-      ctx.fillStyle = isDarkMode.value ? MAP_BACKGROUND_DARK : MAP_BACKGROUND_LIGHT;
-      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
       
       ctx.font = '20px Arial';
       ctx.fillStyle = '#ff0000';

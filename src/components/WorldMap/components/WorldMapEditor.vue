@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive, nextTick, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, reactive, nextTick, onBeforeUnmount, provide, inject } from 'vue';
 import { useRouter } from 'vue-router';
 import WorldMapCanvas from './WorldMapCanvas.vue';
 import { useMapData } from '../composables/useMapData';
 import type { WorldMapData } from '../../../types/map';
 import FloatingPanel from './FloatingPanel.vue';
 import DrawToolPanel from './DrawToolPanel.vue';
+import MapManageTool from './MapManageTool.vue';
+import { useLayerManager, LAYER_MANAGER_KEY } from '../composables/useLayerManager';
 
 // 定义事件
 const emit = defineEmits(['error', 'save']);
@@ -16,15 +18,23 @@ const router = useRouter();
 // 获取地图数据
 const mapData = useMapData();
 
+// 注入父组件提供的图层管理器
+const layerManager = inject(LAYER_MANAGER_KEY);
+if (!layerManager) {
+  console.error('未找到父组件提供的LayerManager，将创建新实例');
+  // 仅在未找到时才创建新实例作为兼容措施
+  const newLayerManager = useLayerManager();
+  provide(LAYER_MANAGER_KEY, newLayerManager);
+  console.log('WorldMapEditor: 已创建备用图层管理器实例');
+} else {
+  console.log('WorldMapEditor: 使用父组件提供的图层管理器实例');
+}
+
 // 显示状态面板
 const showStatusPanel = ref(true);
 
 // 显示绘图工具面板
 const showDrawToolPanel = computed(() => mapData.getEditState().currentTool === 'mapdraw');
-
-// 获取图层可见性状态
-const layerVisibility = computed(() => mapData.layerVisibility);
-const toggleLayerVisibility = (layerId: string) => mapData.toggleLayerVisibility(layerId);
 
 // 引用地图画布组件
 const mapCanvasRef = ref<InstanceType<typeof WorldMapCanvas> | null>(null);
@@ -302,10 +312,8 @@ function fitWorldView() {
     });
     
     // 重绘地图
-    updateCanvas();
     
-    console.log(`适应全局视图: 容器: ${params.containerWidth}x${params.containerHeight}, 缩放: ${params.scale.toFixed(2)}, 偏移: (${params.offsetX.toFixed(0)}, ${params.offsetY.toFixed(0)})`);
-  } catch (e) {
+     } catch (e) {
     emit('error', `适应视图失败: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
@@ -545,6 +553,8 @@ defineExpose({
         @terrain-change="handleTerrainChange"
         @width-change="handleWidthChange"
       />
+
+      <MapManageTool :map-canvas-ref="mapCanvasRef" />
     </div>
   </div>
 </template>

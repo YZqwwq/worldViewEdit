@@ -2,6 +2,8 @@
 export const LAYER_IDS = {
   BASE: 'base',
   GRID: 'grid',
+  MAP: 'map',
+  LOCATION: 'location',
   TERRITORY: 'territory',
   CONNECTION: 'connection',
   COUNTRY: 'country',

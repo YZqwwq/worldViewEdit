@@ -1,5 +1,5 @@
-import { ref, computed, Ref, watch, onMounted, onBeforeUnmount } from 'vue';
-import { useLayerManager } from './useLayerManager';
+import { ref, computed, Ref, watch, onMounted, onBeforeUnmount, provide } from 'vue';
+import { useLayerManager, LAYER_MANAGER_KEY } from './useLayerManager';
 import { 
   createBackgroundLayer, 
   createMapLayer, 
@@ -17,26 +17,36 @@ import type { Layer } from './useLayerFactory';
  * 世界地图图层系统
  * 
  * 该组合式函数对所有地图图层进行集中管理，提供了统一的接口来初始化、更新和控制图层
+ * 注意：使用此函数的组件会自动将图层管理器提供给其所有子组件
  */
 export function useWorldMapLayers(props: {
   // 要加载的地图ID
   mapId?: string;
   // 是否在初始化时自动创建图层
   autoInit?: boolean;
+  // 允许外部传入图层管理器，确保全局只有一个实例
+  externalLayerManager?: ReturnType<typeof useLayerManager>;
 }) {
   // 默认值
   const defaultMapId = props.mapId || 'default';
   const autoInit = props.autoInit !== false;
   
-  // 获取图层管理器
-  const layerManager = useLayerManager();
+  // 获取图层管理器（优先使用外部传入的实例）
+  const layerManager = props.externalLayerManager || useLayerManager();
+  
+  // 确保图层管理器被正确提供给子组件
+  // 不管是使用自己创建的还是外部传入的，都需要在当前组件树中重新provide一次
+  provide(LAYER_MANAGER_KEY, layerManager);
+  
+  if (!props.externalLayerManager) {
+    console.log('已创建并提供新的图层管理器实例');
+  } else {
+    console.log('使用外部传入的图层管理器实例');
+  }
   
   // 图层初始化状态
   const isLayersInitialized = ref(false);
   const isLayersReady = ref(false);
-  
-  // 记录当前可见性状态
-  const layerVisibility = ref<Record<string, boolean>>({});
   
   // 图层配置
   interface LayerConfig {
@@ -53,14 +63,14 @@ export function useWorldMapLayers(props: {
     { id: LAYER_IDS.TERRITORY, name: '势力范围', zIndex: 20, visible: true },
     { id: LAYER_IDS.GRID, name: '网格', zIndex: 30, visible: true },
     { id: LAYER_IDS.CONNECTION, name: '连接线', zIndex: 40, visible: true },
-    { id: LAYER_IDS.LOCATION, name: '位置', zIndex: 50, visible: true },
+    { id: LAYER_IDS.LOCATION, name: '重要位置', zIndex: 50, visible: true },
     { id: LAYER_IDS.LABEL, name: '标签', zIndex: 60, visible: true },
     { id: LAYER_IDS.COORDINATE, name: '坐标系', zIndex: 70, visible: true }
   ];
   
-  // 初始化图层可见性
+  // 初始化图层默认可见性
   defaultLayerConfigs.forEach(config => {
-    layerVisibility.value[config.id] = config.visible;
+    layerManager.toggleLayer(config.id, config.visible);
   });
   
   /**
@@ -193,11 +203,6 @@ export function useWorldMapLayers(props: {
       layerManager.addLayers(layers);
       console.log(`已创建并添加 ${layers.length} 个图层`);
       
-      // 应用初始可见性
-      Object.entries(layerVisibility.value).forEach(([id, visible]) => {
-        layerManager.toggleLayer(id, visible);
-      });
-      
       // 更新状态
       isLayersInitialized.value = true;
       
@@ -211,51 +216,6 @@ export function useWorldMapLayers(props: {
     } catch (error) {
       console.error('创建图层时出错:', error);
     }
-  }
-  
-  /**
-   * 设置图层可见性
-   * 
-   * @param id 图层ID
-   * @param visible 是否可见
-   */
-  function setLayerVisibility(id: string, visible: boolean) {
-    // 更新本地状态
-    layerVisibility.value[id] = visible;
-    
-    // 应用到图层
-    if (isLayersInitialized.value) {
-      layerManager.toggleLayer(id, visible);
-    }
-  }
-  
-  /**
-   * 获取图层可见性
-   * 
-   * @param id 图层ID
-   * @returns 图层是否可见
-   */
-  function getLayerVisibility(id: string): boolean {
-    // 优先使用图层管理器中的状态
-    if (isLayersInitialized.value) {
-      const layer = layerManager.getLayer(id);
-      if (layer) {
-        return layer.visible.value;
-      }
-    }
-    
-    // 回退到本地状态
-    return layerVisibility.value[id] || false;
-  }
-  
-  /**
-   * 切换图层可见性
-   * 
-   * @param id 图层ID
-   */
-  function toggleLayerVisibility(id: string) {
-    const currentVisibility = getLayerVisibility(id);
-    setLayerVisibility(id, !currentVisibility);
   }
   
   /**
@@ -316,7 +276,10 @@ export function useWorldMapLayers(props: {
   // 销毁图层
   onBeforeUnmount(() => {
     if (isLayersInitialized.value) {
-      layerManager.destroyAll();
+      // 只有在我们自己创建的图层管理器时才销毁它
+      if (!props.externalLayerManager) {
+        layerManager.destroyAll();
+      }
       isLayersInitialized.value = false;
       isLayersReady.value = false;
     }
@@ -327,7 +290,7 @@ export function useWorldMapLayers(props: {
     // 状态
     isLayersInitialized,
     isLayersReady,
-    layerVisibility: computed(() => layerVisibility.value),
+    layerVisibility: layerManager.layerVisibility,
     
     // 底层图层管理器
     layerManager,
@@ -340,9 +303,9 @@ export function useWorldMapLayers(props: {
     
     // 图层操作
     getLayer,
-    setLayerVisibility,
-    getLayerVisibility, 
-    toggleLayerVisibility,
+    setLayerVisibility: layerManager.toggleLayer,
+    getLayerVisibility: layerManager.getLayerVisibility,
+    toggleLayerVisibility: (id: string) => layerManager.toggleLayer(id), 
     
     // 图层配置
     layerConfigs: defaultLayerConfigs

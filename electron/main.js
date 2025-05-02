@@ -151,7 +151,6 @@ function showSettings() {
 }
 
 function createWindow() {
-  console.log('创建窗口...');
   
   // 创建浏览器窗口
   mainWindow = new BrowserWindow({

@@ -21,13 +21,18 @@ export function useLayerManager() {
   const canvasHeight = ref(0);
   const isInitialized = ref(false);
   
+  // 增加图层可见性状态存储
+  const layerVisibilityState = ref<Record<string, boolean>>({});
+  
   // 添加图层，返回图层引用以方便链式调用
   function addLayer(layer: Layer): Layer {
-    console.log(`正在添加图层 ${layer.id}`);
     const newLayerMap = { ...layerMap.value, [layer.id]: layer };
     layerMap.value = newLayerMap;
     
-    console.log(`成功添加图层 ${layer.id}，当前图层数量: ${Object.keys(layerMap.value).length}`);
+    // 应用预设的可见性（如果有）
+    if (layer.id in layerVisibilityState.value) {
+      layer.visible.value = layerVisibilityState.value[layer.id];
+    }
     
     // 如果已经初始化，直接初始化图层
     if (isInitialized.value && parentElement.value) {
@@ -43,12 +48,15 @@ export function useLayerManager() {
     const newLayerMap = { ...layerMap.value };
     
     layersToAdd.forEach(layer => {
+      // 应用预设的可见性（如果有）
+      if (layer.id in layerVisibilityState.value) {
+        layer.visible.value = layerVisibilityState.value[layer.id];
+      }
+      
       newLayerMap[layer.id] = layer;
     });
     
-    layerMap.value = newLayerMap;
-    console.log(`批量添加了 ${layersToAdd.length} 个图层，当前图层数量: ${Object.keys(layerMap.value).length}`);
-    
+    layerMap.value = newLayerMap;  
     // 如果已经初始化，直接初始化图层
     if (isInitialized.value && parentElement.value) {
       layersToAdd.forEach(layer => {
@@ -76,46 +84,76 @@ export function useLayerManager() {
       const newLayerMap = { ...layerMap.value };
       delete newLayerMap[id];
       layerMap.value = newLayerMap;
+      
+      // 同时清除可见性状态
+      const newVisibilityState = { ...layerVisibilityState.value };
+      delete newVisibilityState[id];
+      layerVisibilityState.value = newVisibilityState;
+      
       console.log(`已移除图层 ${id}`);
     } else {
       console.warn(`尝试移除不存在的图层 ${id}`);
     }
   }
   
+  // 获取图层可见性
+  function getLayerVisibility(id: string): boolean {
+    // 如果图层存在，返回图层的实际可见性
+    const layer = layerMap.value[id];
+    if (layer) {
+      return layer.visible.value;
+    }
+    
+    // 否则返回预设的可见性（如果有）
+    return layerVisibilityState.value[id] ?? false;
+  }
+  
   // 显示图层
   function showLayer(id: string): void {
+    // 更新可见性状态
+    layerVisibilityState.value[id] = true;
+    
     const layer = layerMap.value[id];
     if (layer) {
       layer.visible.value = true;
       console.log(`已显示图层 ${id}`);
     } else {
-      console.warn(`尝试显示不存在的图层 ${id}`);
+      console.log(`已预设图层 ${id} 为可见（图层尚未创建）`);
     }
   }
   
   // 隐藏图层
   function hideLayer(id: string): void {
+    // 更新可见性状态
+    layerVisibilityState.value[id] = false;
+    
     const layer = layerMap.value[id];
     if (layer) {
       layer.visible.value = false;
       console.log(`已隐藏图层 ${id}`);
     } else {
-      console.warn(`尝试隐藏不存在的图层 ${id}`);
+      console.log(`已预设图层 ${id} 为不可见（图层尚未创建）`);
     }
   }
 
   // 切换图层可见性
   function toggleLayer(id: string, visible?: boolean): void {
+    // 确定要设置的可见性
+    if (visible === undefined) {
+      // 如果未指定，则取反当前可见性
+      visible = !getLayerVisibility(id);
+    }
+    
+    // 更新可见性状态
+    layerVisibilityState.value[id] = visible;
+    
+    // 更新实际图层（如果存在）
     const layer = layerMap.value[id];
     if (layer) {
-      if (visible !== undefined) {
-        layer.visible.value = visible;
-      } else {
-        layer.visible.value = !layer.visible.value;
-      }
-      console.log(`已切换图层 ${id} 可见性为 ${layer.visible.value}`);
+      layer.visible.value = visible;
+      console.log(`已切换图层 ${id} 可见性为 ${visible}`);
     } else {
-      console.warn(`尝试切换不存在的图层 ${id} 的可见性`);
+      console.log(`已预设图层 ${id} 可见性为 ${visible}（图层尚未创建）`);
     }
   }
   
@@ -140,21 +178,23 @@ export function useLayerManager() {
   
   // 增加批量设置图层可见性
   function setLayersVisibility(config: Record<string, boolean>): void {
+    // 更新所有预设状态
     Object.entries(config).forEach(([id, visible]) => {
+      layerVisibilityState.value[id] = visible;
+      
+      // 同时更新实际图层（如果存在）
       const layer = layerMap.value[id];
       if (layer) {
         layer.visible.value = visible;
-      } else {
-        console.warn(`尝试设置不存在的图层 ${id} 的可见性`);
       }
     });
+    
     console.log(`已批量设置图层可见性: ${JSON.stringify(config)}`);
   }
   
   // 增加图层绘制方法
   function renderAll(): void {
     const visibleLayers = Object.values(layerMap.value).filter(layer => layer.visible.value);
-    console.log(`渲染 ${visibleLayers.length} 个可见图层`);
     
     visibleLayers.forEach(layer => {
       try {
@@ -253,6 +293,9 @@ export function useLayerManager() {
   
   // 销毁所有图层
   function destroyAll(): void {
+    // 清空可见性状态
+    layerVisibilityState.value = {};
+    
     Object.values(layerMap.value).forEach(layer => {
       try {
         layer.destroy();
@@ -285,6 +328,7 @@ export function useLayerManager() {
     canvasWidth,
     canvasHeight,
     isInitialized,
+    layerVisibility: computed(() => layerVisibilityState.value),
     
     // 暴露方法
     addLayer,
@@ -295,6 +339,7 @@ export function useLayerManager() {
     hideLayer,
     toggleLayer,
     hasLayer,
+    getLayerVisibility,
     setLayersVisibility,
     initLayerManager,
     resizeAll,
@@ -307,18 +352,15 @@ export function useLayerManager() {
       console.log('--- 图层管理器调试信息 ---');
       console.log(`初始化状态: ${isInitialized.value ? '已初始化' : '未初始化'}`);
       console.log(`容器: ${parentElement.value ? '存在' : '不存在'}`);
-      console.log(`画布大小: ${canvasWidth.value}x${canvasHeight.value}`);
       console.log(`图层数量: ${Object.keys(layerMap.value).length}`);
-      
-      Object.entries(layerMap.value).forEach(([id, layer]) => {
-        console.log(`图层[${id}]: zIndex=${layer.zIndex}, visible=${layer.visible.value}`);
-      });
+      console.log(`可见性状态: ${JSON.stringify(layerVisibilityState.value)}`);
       
       return {
         isInitialized: isInitialized.value,
         layerCount: Object.keys(layerMap.value).length,
         layers: Object.keys(layerMap.value),
-        canvasSize: { width: canvasWidth.value, height: canvasHeight.value }
+        canvasSize: { width: canvasWidth.value, height: canvasHeight.value },
+        visibilityState: layerVisibilityState.value
       };
     }
   };

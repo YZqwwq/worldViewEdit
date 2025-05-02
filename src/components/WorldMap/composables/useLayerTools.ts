@@ -29,13 +29,15 @@ interface DrawState {
  * @param offsetY 视图Y偏移量
  * @param scale 视图缩放比例
  * @param canvasContainerRef Canvas容器元素引用
+ * @param externalLayerManager 外部传入的图层管理器实例，优先使用此实例
  */
 export function useLayerTools(
   mapLayer: Ref<Layer | null>,
   offsetX: Ref<number>,
   offsetY: Ref<number>,
   scale: Ref<number>,
-  canvasContainerRef: Ref<HTMLElement | null>
+  canvasContainerRef: Ref<HTMLElement | null>,
+  externalLayerManager?: ReturnType<typeof useLayerManager>
 ) {
   // 创建绘图状态对象
   const drawState = ref<DrawState>({
@@ -52,13 +54,19 @@ export function useLayerTools(
     cachedScale: 1
   });
   
-  // 尝试获取图层管理器上下文，如果存在的话
-  let layerManager: ReturnType<typeof useLayerManager> | null = null;
-  try {
-    layerManager = useLayerManagerContext();
-    console.log('图层管理器上下文获取成功，可以使用更高级的图层管理功能');
-  } catch (error) {
-    console.log('未找到图层管理器上下文，将仅使用传入的mapLayer参数');
+  // 优先使用外部传入的图层管理器实例，否则尝试通过inject获取
+  let layerManager: ReturnType<typeof useLayerManager> | null = externalLayerManager || null;
+  
+  // 如果没有外部传入的图层管理器，尝试通过inject获取
+  if (!layerManager) {
+    try {
+      layerManager = useLayerManagerContext();
+      console.log('通过inject获取到图层管理器');
+    } catch (error) {
+      console.log('未找到图层管理器上下文，将仅使用传入的mapLayer参数');
+    }
+  } else {
+    console.log('使用外部传入的图层管理器实例');
   }
   
   // 地形类型到颜色的映射
@@ -363,18 +371,15 @@ export function useLayerTools(
   }
   
   function handleMouseUp(event: MouseEvent) {
-    console.log("handleMouseUp 触发", event.type);
     stopDrawing();
   }
   
   function handleMouseLeave(event: MouseEvent) {
-    console.log("handleMouseLeave 触发", event.type);
     stopDrawing();
   }
   
   // 初始化事件监听
   function initDrawingEvents() {
-    console.log("初始化绘图事件");
     
     // 获取当前活动的图层
     const activeLayer = mapLayer.value || (layerManager ? layerManager.getLayer(LAYER_IDS.MAP) : null);
@@ -390,12 +395,6 @@ export function useLayerTools(
       return;
     }
     
-    console.log("绘图画布", {
-      width: canvas.width,
-      height: canvas.height,
-      id: canvas.id
-    });
-    
     // 移除可能已存在的事件监听器
     removeDrawingEvents();
     
@@ -403,7 +402,6 @@ export function useLayerTools(
     canvas.style.pointerEvents = 'auto';
     
     // 添加事件监听
-    console.log("添加事件监听");
     canvas.addEventListener('mousedown', handleMouseDown);
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('mouseup', handleMouseUp);
@@ -412,7 +410,6 @@ export function useLayerTools(
     // 直接添加事件监听器到 document，处理全局鼠标释放
     document.addEventListener('mouseup', handleMouseUp);
     
-    console.log("画布样式", canvas.style.cssText);
   }
   
   // 移除事件监听
@@ -426,7 +423,6 @@ export function useLayerTools(
     }
     
     const canvas = activeLayer.canvas;
-    console.log("移除事件监听器");
     
     // 移除事件监听
     canvas.removeEventListener('mousedown', handleMouseDown);
@@ -447,7 +443,6 @@ export function useLayerTools(
       // 延迟初始化，确保 DOM 已经更新
       setTimeout(() => {
         if (newLayer.canvas) {
-          console.log("Canvas 已准备好，正在初始化事件");
           initDrawingEvents();
         } else {
           console.warn("Canvas 尚未准备好");
@@ -474,7 +469,6 @@ export function useLayerTools(
         // 这里不能直接修改传入的 Ref<Layer | null>，所以我们直接使用找到的 layer
         setTimeout(() => {
           if (layer.canvas) {
-            console.log("Canvas 已准备好，正在初始化事件");
             // 这里我们将通过图层管理器找到的图层手动处理
             const canvas = layer.canvas;
             canvas.style.pointerEvents = 'auto';

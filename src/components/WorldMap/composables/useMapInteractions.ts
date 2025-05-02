@@ -24,7 +24,6 @@ export function useMapInteractions(
   mouseY: Ref<number>,
   drawMap: () => void,
   layers: Ref<Map<string, Layer>>,
-  toggleLayer: (layerId: string, visible?: boolean) => void
 ) {
   // 获取地图数据
   const mapData = useMapData();
@@ -499,10 +498,6 @@ export function useMapInteractions(
     
   }
   
-  // 切换图层可见性
-  function handleToggleLayer(layerId: string) {
-    toggleLayer(layerId);
-  }
   
   // 添加和移除事件监听器
   onMounted(() => {
@@ -533,7 +528,6 @@ export function useMapInteractions(
     handlePointerUp,
     handleKeyDown,
     handleWheel,
-    handleToggleLayer,
     hoveredLocationId,
     drawActiveConnection
   };

@@ -56,11 +56,8 @@ async function saveSettings() {
       fontSize: Number(settings.value.fontSize) || 14
     };
     
-    console.log('准备保存设置:', cleanSettings);
-    
     // 保存到文件
     const filePath = await window.electronAPI.data.saveFile('settings.json', cleanSettings);
-    console.log('设置已保存到:', filePath);
     emit('save', cleanSettings);
   } catch (error) {
     console.error('保存设置失败:', error);

@@ -1,16 +1,8 @@
-import { ref, computed, onMounted, onBeforeUnmount, watchEffect } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watchEffect, provide, inject } from 'vue';
 import type { Ref } from 'vue';
-import { useLayerManager } from './useLayerManager';
-import {
-  createGridLayer,
-  createConnectionLayer,
-  createLocationLayer,
-  createTerritoryLayer,
-  createLabelLayer,
-  createCoordinateLayer,
-  createBackgroundLayer,
-  createMapLayer
-} from './useLayers';
+import { useLayerManager, LAYER_MANAGER_KEY } from './useLayerManager';
+// 引入useWorldMapLayers
+import { useWorldMapLayers } from './useWorldMapLayers';
 
 // 图层ID常量
 export const LAYER_IDS = {
@@ -37,8 +29,22 @@ export function useMapCanvas(
   currentLocationId: Ref<string>,
   canvasContainerRef: Ref<HTMLElement | null>
 ) {
-  // 使用图层管理器
-  const layerManager = useLayerManager();
+  // 注入而不是创建LayerManager，指定类型
+  const layerManager = inject<ReturnType<typeof useLayerManager>>(LAYER_MANAGER_KEY);
+  
+  if (!layerManager) {
+    console.error('useMapCanvas: 未找到LayerManager，请确保在父组件中调用了provide');
+    throw new Error('未找到LayerManager，无法初始化地图画布');
+  }
+  
+  console.log('useMapCanvas: 成功获取已注入的图层管理器实例');
+  
+  // 使用增强的图层系统，传入注入的layerManager
+  const worldMapLayers = useWorldMapLayers({
+    mapId: '1', // 可以根据需要从参数中传入
+    autoInit: false, // 我们手动控制初始化
+    externalLayerManager: layerManager // 传入外部创建的图层管理器
+  });
   
   // 计算画布宽高
   const containerWidth = ref(0);
@@ -53,105 +59,25 @@ export function useMapCanvas(
     
     console.log('初始化多图层地图画布系统', canvasContainerRef.value);
     
-    // 初始化图层管理器
-    layerManager.initLayerManager(canvasContainerRef.value);
+    // 使用worldMapLayers初始化图层
+    worldMapLayers.initializeLayers(canvasContainerRef.value, {
+      isDarkMode,
+      offsetX,
+      offsetY,
+      scale,
+      mapData,
+      isDrawingConnection: ref(false),
+      connectionStartId: ref(''),
+      mouseX: ref(0),
+      mouseY: ref(0),
+      currentLocationId
+    });
     
-    console.log('开始创建各图层');
+    // 调试当前图层状态
+    worldMapLayers.layerManager.debug();
     
-    try {
-      // 批量创建所有图层
-      const layers = [
-        // 背景图层 (z-index: 1)
-        createBackgroundLayer(
-          { id: LAYER_IDS.BACKGROUND, name: '背景', zIndex: 1, isBaseLayer: true },
-          isDarkMode
-        ),
-        
-        // 地图绘制图层 (z-index: 10)
-        createMapLayer(
-          { id: LAYER_IDS.MAP, name: '地图绘制', zIndex: 10 },
-          isDarkMode,
-          offsetX,
-          offsetY,
-          scale,
-          '1' // 先写死
-        ),
-        
-        // 地域势力图层 (z-index: 20)
-        createTerritoryLayer(
-          { id: LAYER_IDS.TERRITORY, name: '地域势力', zIndex: 20 },
-          mapData,
-          offsetX,
-          offsetY,
-          scale
-        ),
-        
-        // 网格图层 (z-index: 30)
-        createGridLayer(
-          { id: LAYER_IDS.GRID, name: '网格', zIndex: 30 },
-          isDarkMode,
-          offsetX,
-          offsetY,
-          scale
-        ),
-        
-        // 连线图层 (z-index: 40)
-        createConnectionLayer(
-          { id: LAYER_IDS.CONNECTION, name: '连线', zIndex: 40 },
-          mapData,
-          offsetX,
-          offsetY,
-          scale,
-          ref(false),
-          ref(''),
-          ref(0),
-          ref(0),
-          currentLocationId
-        ),
-        
-        // 位置标记图层 (z-index: 50)
-        createLocationLayer(
-          { id: LAYER_IDS.LOCATION, name: '重要位置', zIndex: 50 },
-          mapData,
-          offsetX,
-          offsetY,
-          scale,
-          currentLocationId
-        ),
-        
-        // 标签图层 (z-index: 60)
-        createLabelLayer(
-          { id: LAYER_IDS.LABEL, name: '标签', zIndex: 60 },
-          mapData,
-          offsetX,
-          offsetY,
-          scale,
-          isDarkMode
-        ),
-        
-        // 坐标图层 (z-index: 70)
-        createCoordinateLayer(
-          { id: LAYER_IDS.COORDINATE, name: '坐标', zIndex: 70 },
-          isDarkMode,
-          offsetX,
-          offsetY,
-          scale
-        )
-      ];
-      
-      // 批量添加所有图层
-      layerManager.addLayers(layers);
-      console.log(`已批量添加 ${layers.length} 个图层`);
-      
-      // 调试当前图层状态
-      layerManager.debug();
-      
-    } catch (error) {
-      console.error('创建图层时出错:', error);
-    }
-
     // 全局注册图层管理器，便于调试
-    window.layerManager = layerManager;
+    window.layerManager = layerManager as any;
   }
   
   // 初始化画布
@@ -193,8 +119,8 @@ export function useMapCanvas(
     
     console.log(`调整画布大小: ${rect.width}x${rect.height}`);
     
-    // 使用图层管理器调整所有图层大小
-    layerManager.resizeAll(rect.width, rect.height);
+    // 使用worldMapLayers调整所有图层大小
+    worldMapLayers.resizeAllLayers(rect.width, rect.height);
     
     // 重新渲染
     renderAll();
@@ -203,7 +129,7 @@ export function useMapCanvas(
   // 清除所有图层
   function clearAll() {
     Object.values(LAYER_IDS).forEach(id => {
-      const layer = layerManager.getLayer(id);
+      const layer = worldMapLayers.getLayer(id);
       if (layer) {
         layer.clear();
       }
@@ -212,34 +138,12 @@ export function useMapCanvas(
   
   // 渲染所有图层
   function renderAll() {
-    layerManager.renderAll();
+    worldMapLayers.renderAllLayers();
   }
   
   // 主要绘制方法
   function drawMap() {
     renderAll();
-  }
-  
-  // 切换图层可见性
-  function toggleLayer(layerId: string, visible?: boolean) {
-    layerManager.toggleLayer(layerId, visible);
-    
-    // 获取图层实例并重新渲染
-    const layer = layerManager.getLayer(layerId);
-    if (layer) {
-      if (layer.visible.value) {
-        layer.render();
-      } else {
-        layer.clear();
-      }
-      console.log(`图层 ${layerId} 可见性已切换为 ${layer.visible.value}`);
-    }
-  }
-  
-  // 获取图层可见性
-  function getLayerVisibility(layerId: string): boolean {
-    const layer = layerManager.getLayer(layerId);
-    return layer ? layer.visible.value : false;
   }
   
   // 销毁和清理
@@ -248,28 +152,26 @@ export function useMapCanvas(
     clearAll();
   });
   
-  // 导出接口
+  // 导出接口（保持不变，便于兼容）
   return {
     // 基本信息
-    canvasWidth: computed(() => layerManager.canvasWidth.value),
-    canvasHeight: computed(() => layerManager.canvasHeight.value),
+    canvasWidth: computed(() => worldMapLayers.layerManager.canvasWidth.value),
+    canvasHeight: computed(() => worldMapLayers.layerManager.canvasHeight.value),
     
     // 图层相关
-    layers: layerManager.layers,
-    layerManager,
+    layers: worldMapLayers.layerManager.layers,
+    layerManager: worldMapLayers.layerManager,
     LAYER_IDS,
     
     // 方法
     initCanvas,
     handleResize,
     drawMap,
-    toggleLayer,
-    getLayerVisibility,
     
     // 工具方法
-    getLayer: layerManager.getLayer,
-    showLayer: layerManager.showLayer,
-    hideLayer: layerManager.hideLayer
+    getLayer: worldMapLayers.getLayer,
+    showLayer: (id: string) => worldMapLayers.setLayerVisibility(id, true),
+    hideLayer: (id: string) => worldMapLayers.setLayerVisibility(id, false)
   };
 }
 
