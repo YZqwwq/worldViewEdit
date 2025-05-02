@@ -205,6 +205,27 @@ export function useLayerManager() {
     });
   }
   
+  // 增加单个图层渲染方法
+  function renderLayer(id: string): void {
+    const layer = layerMap.value[id];
+    if (layer) {
+      try {
+        if (layer.visible.value) {
+          layer.render();
+          console.log(`已渲染图层 ${id}`);
+        } else {
+          // 如果图层不可见，清除该图层
+          layer.clear();
+          console.log(`已清除图层 ${id}（不可见）`);
+        }
+      } catch (error) {
+        console.error(`图层 ${id} 渲染失败:`, error);
+      }
+    } else {
+      console.warn(`尝试渲染不存在的图层 ${id}`);
+    }
+  }
+  
   // 增加注册全局事件方法
   function registerGlobalEvents(): void {
     if (!parentElement.value) {
@@ -344,6 +365,7 @@ export function useLayerManager() {
     initLayerManager,
     resizeAll,
     renderAll,
+    renderLayer,
     destroyAll,
     getAllLayers: () => Object.values(layerMap.value),
     

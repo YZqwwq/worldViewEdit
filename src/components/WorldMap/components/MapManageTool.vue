@@ -67,11 +67,11 @@ function toggleLayerVisibility(layerId: string) {
   layerManager.toggleLayer(layerId);
   console.log(`切换图层 ${layerId} 可见性为: ${layerManager.getLayerVisibility(layerId)}`);
   
-  // 如果有画布引用，同步到画布
+  // 如果有画布引用，只重新渲染被切换的图层
   if (props.mapCanvasRef) {
     try {
-      props.mapCanvasRef.initCanvas();
-      props.mapCanvasRef.drawMap();
+      // 使用renderLayer只渲染变更的图层，而不是重绘整个画布
+      props.mapCanvasRef.renderLayer(layerId);
     } catch (e) {
       console.warn('更新画布显示失败', e);
     }
@@ -98,7 +98,7 @@ function setAllLayersVisibility(visible: boolean) {
   // 使用图层管理器的批量设置方法
   layerManager.setLayersVisibility(visibilityConfig);
   
-  // 如果有画布引用，更新画布显示
+  // 如果有画布引用，只重新渲染画布，不重新初始化图层
   if (props.mapCanvasRef) {
     try {
       props.mapCanvasRef.drawMap();

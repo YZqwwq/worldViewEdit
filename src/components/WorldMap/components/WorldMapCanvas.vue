@@ -111,7 +111,8 @@ const {
   handleResize,
   layers,
   layerManager,
-  LAYER_IDS: CANVAS_LAYER_IDS
+  LAYER_IDS: CANVAS_LAYER_IDS,
+  renderLayer
 } = useMapCanvas(
   computed(() => viewState.value.isDarkMode),
   computed(() => viewState.value.offsetX),
@@ -270,6 +271,7 @@ defineExpose({
   undo,
   redo,
   initDrawingEvents,
+  renderLayer,
 });
 </script>
 

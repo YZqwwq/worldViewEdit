@@ -231,6 +231,19 @@ export function useWorldMapLayers(props: {
   }
   
   /**
+   * 渲染单个图层
+   * @param id 图层ID
+   */
+  function renderLayer(id: string) {
+    if (!isLayersInitialized.value) {
+      console.warn('图层尚未初始化，无法渲染');
+      return;
+    }
+    
+    layerManager.renderLayer(id);
+  }
+  
+  /**
    * 调整所有图层大小
    * 
    * @param width 新宽度
@@ -299,6 +312,7 @@ export function useWorldMapLayers(props: {
     // 核心方法
     initializeLayers,
     renderAllLayers,
+    renderLayer,
     resizeAllLayers,
     
     // 图层操作

@@ -141,6 +141,11 @@ export function useMapCanvas(
     worldMapLayers.renderAllLayers();
   }
   
+  // 渲染单个图层
+  function renderLayer(id: string) {
+    worldMapLayers.renderLayer(id);
+  }
+  
   // 主要绘制方法
   function drawMap() {
     renderAll();
@@ -167,6 +172,7 @@ export function useMapCanvas(
     initCanvas,
     handleResize,
     drawMap,
+    renderLayer,
     
     // 工具方法
     getLayer: worldMapLayers.getLayer,
