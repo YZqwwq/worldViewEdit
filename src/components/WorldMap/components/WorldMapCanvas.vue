@@ -1,23 +1,26 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed, watch, inject } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, watch, inject, provide } from 'vue';
 import { useMapCanvas } from '../composables/useMapCanvas';
 import { useMapInteractions } from '../composables/useMapInteractions';
 import { useMapData } from '../composables/useMapData';
 import { useLayerTools, DrawToolType } from '../composables/useLayerTools';
 import { Layer } from '../composables/useLayerFactory';
 import { LAYER_IDS } from '../composables/useMapCanvas';
-import { LAYER_MANAGER_KEY } from '../composables/useLayerManager';
+import { LAYER_MANAGER_KEY, useLayerManager } from '../composables/useLayerManager';
 
 // 获取地图数据
 const mapData = useMapData();
 console.log("mapData", mapData.getViewState().scale)
 
-// 检查是否存在图层管理器
-const layerManagerExists = inject(LAYER_MANAGER_KEY) !== undefined;
-if (!layerManagerExists) {
-  console.warn("WorldMapCanvas: 未找到图层管理器注入，这可能导致图层系统无法正常工作");
+// 获取图层管理器并重新提供给子组件
+const injectedLayerManager = inject(LAYER_MANAGER_KEY);
+
+// 如果找到了图层管理器，确保重新提供它以保持依赖注入链
+if (injectedLayerManager) {
+  console.log("WorldMapCanvas: 成功获取图层管理器注入并重新提供");
+  provide(LAYER_MANAGER_KEY, injectedLayerManager);
 } else {
-  console.log("WorldMapCanvas: 成功获取图层管理器注入");
+  console.warn("WorldMapCanvas: 未找到图层管理器注入，图层功能可能无法正常工作");
 }
 
 // 定义属性
@@ -173,7 +176,7 @@ const {
   computed(() => viewState.value.offsetY),
   computed(() => viewState.value.scale),
   canvasContainerRef,
-  layerManager
+  layerManager // 使用从useMapCanvas中获取的layerManager
 );
 
 // 监听绘图工具变化
@@ -217,7 +220,10 @@ function handleTerrainChange(terrain: string) {
 
 // 组件挂载时初始化
 onMounted(async () => {
+  console.log("WorldMapCanvas 组件挂载开始");
   window.addEventListener('keydown', handleKeyDown);
+  
+  console.log("Canvas容器引用状态:", canvasContainerRef.value ? "已获取" : "未获取");
   
   // 初始化画布 - 这里会创建所有图层
   initCanvas();
@@ -229,14 +235,18 @@ onMounted(async () => {
   
   // 给予图层创建时间
   setTimeout(() => {
+    console.log("延时检查 mapLayer 状态");
+    console.log("Canvas容器引用状态:", canvasContainerRef.value ? "已获取" : "未获取");
     
     if (mapLayerRef.value) {
+      console.log("mapLayer 已就绪，初始化绘图工具");
       // 手动初始化绘图工具
       initDrawingEvents();
     } else {
       console.warn("mapLayer未就绪，可能影响绘图功能");
       
       // 尝试重新初始化
+      console.log("尝试重新初始化画布...");
       initCanvas();
       handleResize();
       drawMap();
@@ -244,6 +254,7 @@ onMounted(async () => {
       // 再次检查
       setTimeout(() => {
         console.log("二次检查mapLayer:", mapLayerRef.value);
+        console.log("Canvas容器最终状态:", canvasContainerRef.value ? "已获取" : "未获取");
         if (mapLayerRef.value) {
           // 手动初始化绘图工具
           initDrawingEvents();
@@ -286,7 +297,6 @@ defineExpose({
   >
     <canvas class="main-canvas"></canvas>
     
-    <!-- 坐标显示 -->
     <div v-if="showCoordinates" class="coordinates-display">
       {{ coordinates.x }}, {{ coordinates.y }}
     </div>

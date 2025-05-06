@@ -39,9 +39,9 @@ export function useWorldMapLayers(props: {
   provide(LAYER_MANAGER_KEY, layerManager);
   
   if (!props.externalLayerManager) {
-    console.log('已创建并提供新的图层管理器实例');
+    console.log('useWorldMapLayers: 已创建并提供新的图层管理器实例');
   } else {
-    console.log('使用外部传入的图层管理器实例');
+    console.log('useWorldMapLayers: 使用外部传入的图层管理器实例');
   }
   
   // 图层初始化状态
@@ -298,30 +298,24 @@ export function useWorldMapLayers(props: {
     }
   });
   
-  // 返回接口
+  // 返回接口，确保图层管理器被正确暴露
   return {
+    // 图层管理器实例
+    layerManager,
     // 状态
     isLayersInitialized,
     isLayersReady,
-    layerVisibility: layerManager.layerVisibility,
-    
-    // 底层图层管理器
-    layerManager,
-    LAYER_IDS,
-    
-    // 核心方法
+    // 方法
     initializeLayers,
     renderAllLayers,
     renderLayer,
     resizeAllLayers,
-    
-    // 图层操作
     getLayer,
-    setLayerVisibility: layerManager.toggleLayer,
-    getLayerVisibility: layerManager.getLayerVisibility,
-    toggleLayerVisibility: (id: string) => layerManager.toggleLayer(id), 
-    
-    // 图层配置
-    layerConfigs: defaultLayerConfigs
+    // 新增便捷方法
+    setLayerVisibility: (id: string, visible: boolean) => {
+      layerManager.toggleLayer(id, visible);
+      renderLayer(id);
+    },
+    getLayerVisibility: (id: string) => layerManager.getLayerVisibility(id),
   };
 } 

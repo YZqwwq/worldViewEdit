@@ -61,21 +61,21 @@ export function useMapCanvas(
     
     // 使用worldMapLayers初始化图层
     worldMapLayers.initializeLayers(canvasContainerRef.value, {
-      isDarkMode,
-      offsetX,
-      offsetY,
-      scale,
-      mapData,
+          isDarkMode,
+          offsetX,
+          offsetY,
+          scale,
+          mapData,
       isDrawingConnection: ref(false),
       connectionStartId: ref(''),
       mouseX: ref(0),
       mouseY: ref(0),
-      currentLocationId
+          currentLocationId
     });
-    
-    // 调试当前图层状态
+      
+      // 调试当前图层状态
     worldMapLayers.layerManager.debug();
-    
+
     // 全局注册图层管理器，便于调试
     window.layerManager = layerManager as any;
   }

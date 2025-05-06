@@ -8,6 +8,7 @@ import FloatingPanel from './FloatingPanel.vue';
 import DrawToolPanel from './DrawToolPanel.vue';
 import MapManageTool from './MapManageTool.vue';
 import { useLayerManager, LAYER_MANAGER_KEY } from '../composables/useLayerManager';
+import { DrawToolType } from '../composables/useLayerTools';
 
 // 定义事件
 const emit = defineEmits(['error', 'save']);
@@ -21,13 +22,14 @@ const mapData = useMapData();
 // 注入父组件提供的图层管理器
 const layerManager = inject(LAYER_MANAGER_KEY);
 if (!layerManager) {
-  console.error('未找到父组件提供的LayerManager，将创建新实例');
-  // 仅在未找到时才创建新实例作为兼容措施
-  const newLayerManager = useLayerManager();
-  provide(LAYER_MANAGER_KEY, newLayerManager);
-  console.log('WorldMapEditor: 已创建备用图层管理器实例');
+  // 只记录警告，不再创建新实例，避免多实例问题
+  console.warn('WorldMapEditor: 未找到父组件提供的LayerManager，这可能导致图层功能不可用');
 } else {
   console.log('WorldMapEditor: 使用父组件提供的图层管理器实例');
+}
+// 重新提供图层管理器给子组件，确保依赖注入链完整
+if (layerManager) {
+  provide(LAYER_MANAGER_KEY, layerManager);
 }
 
 // 显示状态面板
@@ -376,18 +378,30 @@ function goBack() {
 
 // 处理绘图工具变化
 function handleDrawToolChange(event: { tool: string }) {
-  // 这里可以处理绘图工具的变化，比如切换画笔、橡皮擦等
-  console.log('Draw tool changed:', event.tool);
+  // 调用WorldMapCanvas的方法处理绘图工具变化
+  if (mapCanvasRef.value) {
+    mapCanvasRef.value.handleDrawToolChange(event.tool as DrawToolType);
+  } else {
+    console.warn('地图画布引用不可用，无法设置绘图工具');
+  }
 }
 
 function handleTerrainChange(terrain: string) {
-  // 这里可以处理地形类型的变化
-  console.log('Terrain changed:', terrain);
+  // 调用WorldMapCanvas的方法处理地形类型变化
+  if (mapCanvasRef.value) {
+    mapCanvasRef.value.handleTerrainChange(terrain);
+  } else {
+    console.warn('地图画布引用不可用，无法设置地形类型');
+  }
 }
 
 function handleWidthChange(width: number) {
-  // 这里可以处理线条宽度的变化
-  console.log('Width changed:', width);
+  // 调用WorldMapCanvas的方法处理线条宽度变化
+  if (mapCanvasRef.value) {
+    mapCanvasRef.value.handleLineWidthChange(width);
+  } else {
+    console.warn('地图画布引用不可用，无法设置线条宽度');
+  }
 }
 
 // 显示/隐藏工具下拉菜单

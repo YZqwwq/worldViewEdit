@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, inject } from 'vue';
 import { useMapData } from '../composables/useMapData';
 import { LAYER_IDS } from '../composables/useMapCanvas';
 import FloatingPanel from './FloatingPanel.vue';
 import WorldMapCanvas from './WorldMapCanvas.vue';
-import { useLayerManagerContext } from '../composables/useLayerManager';
+import { useLayerManagerContext, LAYER_MANAGER_KEY } from '../composables/useLayerManager';
 
 // 接收父组件传递的画布引用
 const props = defineProps<{
@@ -22,14 +22,51 @@ interface LayerManagerLike {
   setLayersVisibility: (config: Record<string, boolean>) => void;
 }
 
-// 尝试获取图层管理器，如果失败则使用mapData中的适配层
+// 尝试直接从依赖注入获取图层管理器
+const injectedLayerManager = inject(LAYER_MANAGER_KEY);
+
+// 尝试获取图层管理器，使用多种方式确保能获取到实例
 let layerManager: LayerManagerLike;
 try {
-  layerManager = useLayerManagerContext();
-  console.log('成功获取图层管理器上下文');
+  if (injectedLayerManager) {
+    // 首选：使用注入的图层管理器
+    layerManager = injectedLayerManager as LayerManagerLike;
+    console.log('MapManageTool: 成功获取注入的图层管理器');
+  } else if (props.mapCanvasRef) {
+    // 备选1：尝试从画布引用获取图层管理器，但需要额外检查
+    const canvasRef = props.mapCanvasRef as any;
+    if (canvasRef && canvasRef.layerManager) {
+      layerManager = canvasRef.layerManager;
+      console.log('MapManageTool: 使用从mapCanvasRef获取的图层管理器');
+    } else {
+      throw new Error('mapCanvasRef存在但不包含layerManager');
+    }
+  } else {
+    // 备选2：尝试通过useLayerManagerContext获取
+    try {
+      layerManager = useLayerManagerContext() as LayerManagerLike;
+      console.log('MapManageTool: 通过context获取图层管理器');
+    } catch (e) {
+      // 最后备选：使用mapData中的适配实现
+      console.warn('MapManageTool: 无法获取图层管理器，将使用mapData中的适配实现');
+      // 创建适配器对象，转发对mapData的调用
+      layerManager = {
+        layerVisibility: computed(() => mapData.layerVisibility.value),
+        toggleLayer: (id: string, visible?: boolean) => mapData.toggleLayerVisibility(id),
+        getLayerVisibility: (id: string) => mapData.getLayerVisibility(id),
+        setLayersVisibility: (config: Record<string, boolean>) => {
+          Object.entries(config).forEach(([id, visible]) => {
+            if (mapData.getLayerVisibility(id) !== visible) {
+              mapData.toggleLayerVisibility(id);
+            }
+          });
+        }
+      };
+    }
+  }
 } catch (e) {
-  console.warn('无法获取图层管理器上下文，将使用mapData中的适配实现');
-  // 创建适配器对象，转发对mapData的调用
+  console.error('MapManageTool: 获取图层管理器失败，将使用基本适配实现', e);
+  // 出错时创建最基本的适配器对象
   layerManager = {
     layerVisibility: computed(() => mapData.layerVisibility.value),
     toggleLayer: (id: string, visible?: boolean) => mapData.toggleLayerVisibility(id),
