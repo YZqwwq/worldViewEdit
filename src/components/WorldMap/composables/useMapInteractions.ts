@@ -24,6 +24,10 @@ export function useMapInteractions(
   mouseY: Ref<number>,
   drawMap: () => void,
   layers: Ref<Map<string, Layer>>,
+  // 替换为useMapCanvas的绘图API
+  startDrawing: (x: number, y: number) => void,
+  continueDrawing: (x: number, y: number) => void,
+  stopDrawing: () => void
 ) {
   // 获取地图数据
   const mapData = useMapData();
@@ -132,58 +136,7 @@ export function useMapInteractions(
           locationNameInput.value = location.name || '';
           locationDescInput.value = location.description || '';
         }
-        
       }
-    }else if (currentTool === 'mapdraw') {
-     
-    }else if (currentTool === 'location' && isPointInMap(x, y)) {
-      // 添加新位置
-      const mapCoords = screenToMapCoords(x, y);
-      
-      // 生成唯一ID
-      const newId = `loc${Date.now()}`;
-      
-      // 创建新位置
-      const newLocation = {
-        id: newId,
-        name: '新位置',
-        type: 'default',
-        importance: 'normal',
-        position: {
-          offsetX: mapCoords.offsetX,
-          offsetY: mapCoords.offsetY
-        },
-        description: '',
-        territories: [],
-        isVisible: true,
-        displayPriority: 1,
-        connections: []
-      };
-      
-      // 添加到地图数据
-      const locations = mapData.getLocations() || [];
-      const locationsMap = new Map(locations.filter(loc => loc && loc.id).map(loc => [loc.id, loc]));
-      locationsMap.set(newId, newLocation);
-      
-      // 更新数据
-      mapData.updateMapData({ locations: locationsMap });
-      
-      // 设置为当前选中位置
-      currentLocationId.value = newId;
-      locationNameInput.value = newLocation.name;
-      locationDescInput.value = '';
-      
-      // 切换到选择工具
-      if (editState) {
-        mapData.updateMapData({
-          editState: {
-            ...editState,
-            currentTool: 'select'
-          }
-        });
-      }
-      
-      // drawMap();
     } else if (currentTool === 'connection') {
       // 连接位置
       const locationId = findLocationUnderCursor(x, y);
@@ -253,9 +206,72 @@ export function useMapInteractions(
           // 重置绘制状态
           isDrawingConnection.value = false;
           connectionStartId.value = '';
-          
-          //drawMap();
         }
+      }
+    } 
+    // 对于mapdraw模式，使用useMapCanvas提供的高级绘图API
+    else if (currentTool === 'mapdraw') {
+      console.log('mapdraw模式下的指针事件，调用绘图API');
+      
+      // 获取MAP图层
+      const mapLayer = layers.value.get(LAYER_IDS.MAP);
+      if (mapLayer) {
+        const mapRect = mapLayer.canvas.getBoundingClientRect();
+        const canvasX = e.clientX - mapRect.left;
+        const canvasY = e.clientY - mapRect.top;
+        
+        console.log("开始绘制，坐标:", { canvasX, canvasY });
+        
+        // 调用高级绘图API开始绘制
+        startDrawing(canvasX, canvasY);
+      } else {
+        console.warn("无法获取MAP图层");
+      }
+    } else if (currentTool === 'location' && isPointInMap(x, y)) {
+      // 添加新位置
+      const mapCoords = screenToMapCoords(x, y);
+      
+      // 生成唯一ID
+      const newId = `loc${Date.now()}`;
+      
+      // 创建新位置
+      const newLocation = {
+        id: newId,
+        name: '新位置',
+        type: 'default',
+        importance: 'normal',
+        position: {
+          offsetX: mapCoords.offsetX,
+          offsetY: mapCoords.offsetY
+        },
+        description: '',
+        territories: [],
+        isVisible: true,
+        displayPriority: 1,
+        connections: []
+      };
+      
+      // 添加到地图数据
+      const locations = mapData.getLocations() || [];
+      const locationsMap = new Map(locations.filter(loc => loc && loc.id).map(loc => [loc.id, loc]));
+      locationsMap.set(newId, newLocation);
+      
+      // 更新数据
+      mapData.updateMapData({ locations: locationsMap });
+      
+      // 设置为当前选中位置
+      currentLocationId.value = newId;
+      locationNameInput.value = newLocation.name;
+      locationDescInput.value = '';
+      
+      // 切换到选择工具
+      if (editState) {
+        mapData.updateMapData({
+          editState: {
+            ...editState,
+            currentTool: 'select'
+          }
+        });
       }
     } else if (currentTool === 'territory') {
       // 删除位置
@@ -305,8 +321,6 @@ export function useMapInteractions(
           locationNameInput.value = '';
           locationDescInput.value = '';
         }
-        
-        //drawMap();
       }
     }
   }
@@ -356,7 +370,6 @@ export function useMapInteractions(
       
       // 更新视图状态
       mapData.updateMapData({ viewState: newViewState });
-      
     }
     
     // 如果正在绘制连接
@@ -364,10 +377,21 @@ export function useMapInteractions(
       // 更新当前鼠标位置用于绘制活动连接线
       dragStartX.value = x; // 复用 dragStart X/Y 来存储当前鼠标位置
       dragStartY.value = y;
-      drawActiveConnection(); // 直接调用，不需要ctx参数
-      // 注意：因为绘制活动连接线需要实时重绘，
-      // drawMap() 可能会被频繁调用，考虑性能优化（例如 requestAnimationFrame）
-      // drawMap();
+      drawActiveConnection();
+    }
+    
+    // 支持绘图工具的移动事件
+    if (editState.currentTool === 'mapdraw') {
+      // 如果处于绘图状态，调用高级绘图API继续绘制
+      const mapLayer = layers.value.get(LAYER_IDS.MAP);
+      if (mapLayer) {
+        const mapRect = mapLayer.canvas.getBoundingClientRect();
+        const canvasX = e.clientX - mapRect.left;
+        const canvasY = e.clientY - mapRect.top;
+        
+        // 调用高级绘图API继续绘制
+        continueDrawing(canvasX, canvasY);
+      }
     }
   }
   
@@ -378,6 +402,16 @@ export function useMapInteractions(
 
     // 释放指针捕获
     canvasContainerRef.value?.releasePointerCapture(e.pointerId);
+
+    // 获取编辑状态
+    const editState = mapData.getEditState();
+    if (!editState) return;
+
+    // 如果是绘图工具，在抬起时结束绘图
+    if (editState.currentTool === 'mapdraw') {
+      console.log("结束绘制");
+      stopDrawing();
+    }
 
     isDragging.value = false;
 
@@ -390,7 +424,6 @@ export function useMapInteractions(
       // 如果抬起时不在有效目标点上，或者在起点上，则取消
       isDrawingConnection.value = false;
       connectionStartId.value = '';
-      // drawMap(); // 清除可能绘制的临时线
     }
     // 连接完成的逻辑已经在 handlePointerDown 中处理了第二次点击
   }
@@ -406,7 +439,11 @@ export function useMapInteractions(
       if (isDrawingConnection.value) {
           isDrawingConnection.value = false;
           connectionStartId.value = '';
-          // drawMap(); // 清除可能绘制的临时线
+      }
+
+      // 如果在使用绘图工具，也需要结束绘图
+      if (editState.currentTool === 'mapdraw') {
+        stopDrawing();
       }
 
       // 总是切换回 select 工具
@@ -416,7 +453,6 @@ export function useMapInteractions(
           currentTool: 'select'
         }
       });
-
     }
   }
   
@@ -495,9 +531,7 @@ export function useMapInteractions(
     
     // 更新视图状态
     mapData.updateMapData({ viewState: newViewState });
-    
   }
-  
   
   // 添加和移除事件监听器
   onMounted(() => {

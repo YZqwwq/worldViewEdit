@@ -21,6 +21,24 @@ interface DrawState {
   cachedScale: number;
 }
 
+// 定义返回值类型，供外部引用
+export type LayerToolsReturnType = {
+  drawState: Ref<DrawState>;
+  setCurrentTool: (tool: DrawToolType) => void;
+  setLineWidth: (width: number) => void;
+  setTerrainType: (terrain: string) => void;
+  undo: () => void;
+  redo: () => void;
+  getTerrainColor: (terrain: string) => string;
+  drawPen: (ctx: CanvasRenderingContext2D, x: number, y: number) => void;
+  drawEraser: (ctx: CanvasRenderingContext2D, x: number, y: number) => void;
+  updateDrawingCache: () => void;
+  startDrawing: (x: number, y: number) => void;
+  draw: (x: number, y: number) => void;
+  stopDrawing: () => void;
+  getDrawingContext: () => CanvasRenderingContext2D | null;
+};
+
 /**
  * 地图绘图工具，处理地图图层的绘制功能
  * 
@@ -38,7 +56,7 @@ export function useLayerTools(
   scale: Ref<number>,
   canvasContainerRef: Ref<HTMLElement | null>,
   externalLayerManager?: ReturnType<typeof useLayerManager>
-) {
+): LayerToolsReturnType {
   // 创建绘图状态对象
   const drawState = ref<DrawState>({
     isDrawing: false,
@@ -220,16 +238,40 @@ export function useLayerTools(
       updateDrawingCache();
     }
     
+    // 获取当前活动的图层
+    const activeLayer = mapLayer.value || (layerManager ? layerManager.getLayer(LAYER_IDS.MAP) : null);
+    
+    // 只处理地图绘制工具的事件，并且只在地图图层上绘制
+    if (!activeLayer || !activeLayer.visible.value) {
+      console.log("❗ 绘制无效: 地图图层不存在或不可见");
+      console.log("图层状态:", activeLayer ? `存在，可见性=${activeLayer.visible.value}` : "不存在");
+      return;
+    }
+    
+    // 确保Canvas可被鼠标点击
+    if (activeLayer.canvas) {
+      activeLayer.canvas.style.pointerEvents = 'auto';
+      console.log("确保canvas可接收鼠标事件: pointerEvents = auto");
+    }
+    
     // 保存初始状态
     saveStateToHistory();
   }
   
   // 执行绘制
   function draw(x: number, y: number) {
-    if (!drawState.value.isDrawing) return;
+    if (!drawState.value.isDrawing) {
+      console.log("❗ draw方法被调用但isDrawing=false，不执行绘制");
+      return;
+    }
     
     const ctx = getDrawingContext();
-    if (!ctx) return;
+    if (!ctx) {
+      console.error("❗ 无法获取绘图上下文，绘制失败");
+      return;
+    }
+    
+    console.log("❗ 准备执行绘制，当前工具:", drawState.value.currentTool);
     
     // 根据当前工具执行对应的绘制操作
     switch (drawState.value.currentTool) {
@@ -252,6 +294,12 @@ export function useLayerTools(
   // 画笔工具实现
   function drawPen(ctx: CanvasRenderingContext2D, x: number, y: number) {
     try {
+      console.log("❗ drawPen 绘制线段", { 
+        from: { x: drawState.value.lastX, y: drawState.value.lastY }, 
+        to: { x, y },
+        color: getTerrainColor(drawState.value.terrainType)
+      });
+      
       ctx.globalCompositeOperation = 'source-over';
       ctx.strokeStyle = getTerrainColor(drawState.value.terrainType);
       ctx.lineWidth = drawState.value.lineWidth;
@@ -263,8 +311,10 @@ export function useLayerTools(
       ctx.moveTo(drawState.value.lastX, drawState.value.lastY);
       ctx.lineTo(x, y);
       ctx.stroke();
+      
+      console.log("❗ 线段绘制完成");
     } catch (error) {
-      console.error('画笔绘制失败:', error);
+      console.error('❗ 画笔绘制失败:', error);
     }
   }
   
@@ -320,177 +370,43 @@ export function useLayerTools(
     drawState.value.terrainType = terrain;
   }
   
-  // 处理鼠标事件
-  function handleMouseDown(event: MouseEvent) {
-    console.log("handleMouseDown 触发", event.type);
-    
-    // 获取当前活动的图层
-    const activeLayer = mapLayer.value || (layerManager ? layerManager.getLayer(LAYER_IDS.MAP) : null);
-    
-    // 只处理地图绘制工具的事件，并且只在地图图层上绘制
-    if (!activeLayer || !activeLayer.visible.value) {
-      console.log("handleMouseDown 无效: 地图图层不存在或不可见");
-      return;
-    }
-    
-    const rect = (event.target as HTMLElement).getBoundingClientRect();
-    console.log("鼠标点击坐标", {
-      clientX: event.clientX,
-      clientY: event.clientY,
-      rect: {
-        left: rect.left,
-        top: rect.top,
-        width: rect.width,
-        height: rect.height
-      }
-    });
-    
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    
-    console.log("计算后的坐标", { x, y });
-    startDrawing(x, y);
-  }
-  
-  function handleMouseMove(event: MouseEvent) {
-    if (!drawState.value.isDrawing) return;
-    
-    // 获取当前活动的图层
-    const activeLayer = mapLayer.value || (layerManager ? layerManager.getLayer(LAYER_IDS.MAP) : null);
-    
-    if (!activeLayer || !activeLayer.visible.value) {
-      console.log("handleMouseMove 无效: 地图图层不存在或不可见");
-      return;
-    }
-    
-    const rect = (event.target as HTMLElement).getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    
-    draw(x, y);
-  }
-  
-  function handleMouseUp(event: MouseEvent) {
-    stopDrawing();
-  }
-  
-  function handleMouseLeave(event: MouseEvent) {
-    stopDrawing();
-  }
-  
-  // 初始化事件监听
-  function initDrawingEvents() {
-    
-    // 获取当前活动的图层
+  // 确保初始化时MAP图层设置为可接收鼠标事件
+  function initMapLayer() {
+    console.log("初始化MAP图层设置");
     const activeLayer = mapLayer.value || (layerManager ? layerManager.getLayer(LAYER_IDS.MAP) : null);
     
     if (!activeLayer) {
-      console.error("无法初始化绘图事件: 地图图层不存在");
+      console.error("无法初始化: 地图图层不存在");
       return;
     }
     
     const canvas = activeLayer.canvas;
     if (!canvas) {
-      console.error("无法初始化绘图事件: canvas不存在");
+      console.error("无法初始化: canvas不存在");
       return;
     }
-    
-    // 移除可能已存在的事件监听器
-    removeDrawingEvents();
     
     // 确保Canvas可被鼠标点击
     canvas.style.pointerEvents = 'auto';
-    
-    // 添加事件监听
-    canvas.addEventListener('mousedown', handleMouseDown);
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('mouseup', handleMouseUp);
-    canvas.addEventListener('mouseleave', handleMouseLeave);
-    
-    // 直接添加事件监听器到 document，处理全局鼠标释放
-    document.addEventListener('mouseup', handleMouseUp);
-    
+    console.log("已设置canvas可接收事件: pointerEvents = auto");
   }
   
-  // 移除事件监听
-  function removeDrawingEvents() {
-    // 获取当前活动的图层
-    const activeLayer = mapLayer.value || (layerManager ? layerManager.getLayer(LAYER_IDS.MAP) : null);
-    
-    if (!activeLayer || !activeLayer.canvas) {
-      console.log("无法移除事件监听器：Canvas 不存在");
-      return;
-    }
-    
-    const canvas = activeLayer.canvas;
-    
-    // 移除事件监听
-    canvas.removeEventListener('mousedown', handleMouseDown);
-    canvas.removeEventListener('mousemove', handleMouseMove);
-    canvas.removeEventListener('mouseup', handleMouseUp);
-    canvas.removeEventListener('mouseleave', handleMouseLeave);
-    
-    // 移除全局事件监听
-    document.removeEventListener('mouseup', handleMouseUp);
-  }
-  
-  // 添加 watch 函数来监听 mapLayer 的变化
-  const stopWatch = watch(mapLayer, (newLayer, oldLayer) => {
-    console.log("mapLayer 变化", newLayer?.id || "null");
+  // 监听mapLayer的变化并初始化
+  const stopWatch = watch(mapLayer, (newLayer) => {
     if (newLayer) {
-      console.log("mapLayer 已加载，初始化绘图事件");
-      
-      // 延迟初始化，确保 DOM 已经更新
-      setTimeout(() => {
-        if (newLayer.canvas) {
-          initDrawingEvents();
-        } else {
-          console.warn("Canvas 尚未准备好");
-        }
-      }, 300);
-    } else if (oldLayer) {
-      console.log("mapLayer 已卸载，移除绘图事件");
-      removeDrawingEvents();
+      console.log("mapLayer变化，初始化图层设置");
+      setTimeout(initMapLayer, 100);
     }
   }, { immediate: true });
   
-  // 初始化和清理
+  // 初始化
   onMounted(() => {
     console.log("useLayerTools onMounted");
-    // 使用 watch 监听 mapLayer 的变化，确保在 mapLayer 加载后初始化绘图事件
-    if (mapLayer.value) {
-      console.log("mapLayer 存在，正在初始化绘图事件");
-      initDrawingEvents();
-    } else if (layerManager) {
-      console.log("尝试通过图层管理器获取地图图层");
-      const layer = layerManager.getLayer(LAYER_IDS.MAP);
-      if (layer) {
-        console.log("通过图层管理器找到地图图层，正在初始化绘图事件");
-        // 这里不能直接修改传入的 Ref<Layer | null>，所以我们直接使用找到的 layer
-        setTimeout(() => {
-          if (layer.canvas) {
-            // 这里我们将通过图层管理器找到的图层手动处理
-            const canvas = layer.canvas;
-            canvas.style.pointerEvents = 'auto';
-            
-            // 添加事件监听
-            canvas.addEventListener('mousedown', handleMouseDown);
-            canvas.addEventListener('mousemove', handleMouseMove);
-            canvas.addEventListener('mouseup', handleMouseUp);
-            canvas.addEventListener('mouseleave', handleMouseLeave);
-            
-            // 全局鼠标释放
-            document.addEventListener('mouseup', handleMouseUp);
-          }
-        }, 300);
-      }
-    }
+    initMapLayer();
   });
   
   onBeforeUnmount(() => {
     console.log("useLayerTools onBeforeUnmount");
-    removeDrawingEvents();
-    // 停止 watch
     stopWatch();
   });
   
@@ -506,11 +422,11 @@ export function useLayerTools(
     drawPen,
     drawEraser,
     updateDrawingCache,
-    initDrawingEvents, // 暴露初始化方法，便于外部调用
     
-    // 暴露内部方法用于调试
-    getDrawingContext,
+    // 暴露用于外部调用的绘图方法
     startDrawing,
-    stopDrawing
+    draw,
+    stopDrawing,
+    getDrawingContext
   };
 }

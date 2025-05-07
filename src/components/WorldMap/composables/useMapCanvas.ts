@@ -3,6 +3,10 @@ import type { Ref } from 'vue';
 import { useLayerManager, LAYER_MANAGER_KEY } from './useLayerManager';
 // 引入useWorldMapLayers
 import { useWorldMapLayers } from './useWorldMapLayers';
+// 引入useLayerTools
+import { useLayerTools, DrawToolType } from './useLayerTools';
+// 引入Layer类型
+import { Layer, getMapRect } from './useLayerFactory';
 
 // 图层ID常量
 export const LAYER_IDS = {
@@ -151,6 +155,55 @@ export function useMapCanvas(
     renderAll();
   }
   
+  // 初始化图层绘图工具
+  const mapLayerRef = computed<Layer | null>(() => {
+    return layerManager.getLayer(LAYER_IDS.MAP);
+  });
+  
+  // 集成图层绘图工具
+  const drawTools = useLayerTools(
+    mapLayerRef,
+    offsetX,
+    offsetY,
+    scale,
+    canvasContainerRef,
+    layerManager
+  );
+  
+  // 封装高级绘图API
+  const startDrawing = (x: number, y: number) => {
+    drawTools.startDrawing(x, y);
+  };
+  
+  const continueDrawing = (x: number, y: number) => {
+    drawTools.draw(x, y);
+  };
+  
+  const stopDrawing = () => {
+    drawTools.stopDrawing();
+  };
+  
+  // 工具设置API
+  const setDrawTool = (tool: DrawToolType) => {
+    drawTools.setCurrentTool(tool);
+  };
+  
+  const setDrawLineWidth = (width: number) => {
+    drawTools.setLineWidth(width);
+  };
+  
+  const setDrawTerrainType = (terrain: string) => {
+    drawTools.setTerrainType(terrain);
+  };
+  
+  const undoDraw = () => {
+    drawTools.undo();
+  };
+  
+  const redoDraw = () => {
+    drawTools.redo();
+  };
+  
   // 销毁和清理
   onBeforeUnmount(() => {
     window.removeEventListener('resize', handleResize);
@@ -177,7 +230,18 @@ export function useMapCanvas(
     // 工具方法
     getLayer: worldMapLayers.getLayer,
     showLayer: (id: string) => worldMapLayers.setLayerVisibility(id, true),
-    hideLayer: (id: string) => worldMapLayers.setLayerVisibility(id, false)
+    hideLayer: (id: string) => worldMapLayers.setLayerVisibility(id, false),
+    
+    // 新增图层绘图API
+    drawState: drawTools.drawState,
+    startDrawing,
+    continueDrawing,
+    stopDrawing,
+    setDrawTool,
+    setDrawLineWidth,
+    setDrawTerrainType,
+    undoDraw,
+    redoDraw
   };
 }
 

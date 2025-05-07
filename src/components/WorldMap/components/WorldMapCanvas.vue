@@ -3,7 +3,7 @@ import { ref, onMounted, onBeforeUnmount, computed, watch, inject, provide } fro
 import { useMapCanvas } from '../composables/useMapCanvas';
 import { useMapInteractions } from '../composables/useMapInteractions';
 import { useMapData } from '../composables/useMapData';
-import { useLayerTools, DrawToolType } from '../composables/useLayerTools';
+import type { DrawToolType } from '../composables/useLayerTools';
 import { Layer } from '../composables/useLayerFactory';
 import { LAYER_IDS } from '../composables/useMapCanvas';
 import { LAYER_MANAGER_KEY, useLayerManager } from '../composables/useLayerManager';
@@ -115,7 +115,17 @@ const {
   layers,
   layerManager,
   LAYER_IDS: CANVAS_LAYER_IDS,
-  renderLayer
+  renderLayer,
+  // 新增的绘图API
+  drawState,
+  startDrawing,
+  continueDrawing,
+  stopDrawing,
+  setDrawTool,
+  setDrawLineWidth,
+  setDrawTerrainType,
+  undoDraw,
+  redoDraw
 } = useMapCanvas(
   computed(() => viewState.value.isDarkMode),
   computed(() => viewState.value.offsetX),
@@ -125,6 +135,12 @@ const {
   currentLocationId,
   canvasContainerRef
 );
+
+// 引用地图图层
+const mapLayerRef = computed<Layer | null>(() => {
+  // 尝试从图层管理器获取图层
+  return layerManager.getLayer(LAYER_IDS.MAP);
+});
 
 // 使用地图交互
 const {
@@ -137,8 +153,8 @@ const {
   drawActiveConnection
 } = useMapInteractions(
   canvasContainerRef,
-  isDragging,
-  dragStartX,
+  isDragging, 
+  dragStartX, 
   dragStartY,
   isDrawingConnection,
   connectionStartId,
@@ -150,39 +166,30 @@ const {
   mouseY,
   drawMap,
   layers,
-);
-
-// 引用地图图层
-const mapLayerRef = computed<Layer | null>(() => {
-  // 尝试从图层管理器获取图层
-  return layerManager.getLayer(LAYER_IDS.MAP);
-});
-
-const {
-  drawState,
-  setCurrentTool,
-  setLineWidth,
-  setTerrainType,
-  undo,
-  redo,
-  getTerrainColor,
-  drawPen,
-  drawEraser,
-  updateDrawingCache,
-  initDrawingEvents
-} = useLayerTools(
-  mapLayerRef,
-  computed(() => viewState.value.offsetX),
-  computed(() => viewState.value.offsetY),
-  computed(() => viewState.value.scale),
-  canvasContainerRef,
-  layerManager // 使用从useMapCanvas中获取的layerManager
+  startDrawing,
+  continueDrawing,
+  stopDrawing
 );
 
 // 监听绘图工具变化
 watch(() => drawState.value.currentTool, (newTool) => {
   emit('draw-tool-changed', newTool);
 });
+
+// 处理绘图工具变化
+function handleDrawToolChange(tool: DrawToolType) {
+  setDrawTool(tool);
+}
+
+// 处理线宽变化
+function handleLineWidthChange(width: number) {
+  setDrawLineWidth(width);
+}
+
+// 处理地形类型变化
+function handleTerrainChange(terrain: string) {
+  setDrawTerrainType(terrain);
+}
 
 // 保存位置详情方法
 function saveLocationDetails() {
@@ -203,27 +210,9 @@ const isDrawingMode = computed(() => {
   return editState.value.currentTool === 'mapdraw';
 });
 
-// 处理绘图工具变化
-function handleDrawToolChange(tool: DrawToolType) {
-  setCurrentTool(tool);
-}
-
-// 处理线宽变化
-function handleLineWidthChange(width: number) {
-  setLineWidth(width);
-}
-
-// 处理地形类型变化
-function handleTerrainChange(terrain: string) {
-  setTerrainType(terrain);
-}
-
 // 组件挂载时初始化
 onMounted(async () => {
-  console.log("WorldMapCanvas 组件挂载开始");
-  window.addEventListener('keydown', handleKeyDown);
-  
-  console.log("Canvas容器引用状态:", canvasContainerRef.value ? "已获取" : "未获取");
+  window.addEventListener('keydown', handleKeyDown); // 监听键盘事件
   
   // 初始化画布 - 这里会创建所有图层
   initCanvas();
@@ -239,9 +228,11 @@ onMounted(async () => {
     console.log("Canvas容器引用状态:", canvasContainerRef.value ? "已获取" : "未获取");
     
     if (mapLayerRef.value) {
-      console.log("mapLayer 已就绪，初始化绘图工具");
-      // 手动初始化绘图工具
-      initDrawingEvents();
+      console.log("mapLayer 已就绪，确保设置正确");
+      // 确保MAP图层可以接收鼠标事件
+      if (mapLayerRef.value.canvas) {
+        mapLayerRef.value.canvas.style.pointerEvents = 'auto';
+      }
     } else {
       console.warn("mapLayer未就绪，可能影响绘图功能");
       
@@ -255,15 +246,12 @@ onMounted(async () => {
       setTimeout(() => {
         console.log("二次检查mapLayer:", mapLayerRef.value);
         console.log("Canvas容器最终状态:", canvasContainerRef.value ? "已获取" : "未获取");
-        if (mapLayerRef.value) {
-          // 手动初始化绘图工具
-          initDrawingEvents();
-        } else {
-          console.error("无法加载mapLayer，绘图功能将不可用");
+        if (mapLayerRef.value && mapLayerRef.value.canvas) {
+          mapLayerRef.value.canvas.style.pointerEvents = 'auto';
         }
-      }, 1000);
+      }, 300);
     }
-  }, 500);
+  }, 300);
 });
 
 // 组件卸载时清理
@@ -279,9 +267,8 @@ defineExpose({
   handleDrawToolChange,
   handleLineWidthChange,
   handleTerrainChange,
-  undo,
-  redo,
-  initDrawingEvents,
+  undoDraw,
+  redoDraw,
   renderLayer,
 });
 </script>
@@ -290,9 +277,31 @@ defineExpose({
   <div 
     class="world-map-canvas"
     ref="canvasContainerRef"
-    @pointerdown="(event) => { handlePointerDown(event); event.stopPropagation(); }"
-    @pointermove="(event) => { handlePointerMove(event); event.stopPropagation(); }"
-    @pointerup="(event) => { handlePointerUp(event); event.stopPropagation(); }"
+    @pointerdown="(event) => { 
+      // 如果是mapdraw模式，不阻止事件传播
+      if (editState.currentTool !== 'mapdraw') {
+        handlePointerDown(event); 
+        event.stopPropagation();
+      } else {
+        handlePointerDown(event);
+      }
+    }"
+    @pointermove="(event) => { 
+      if (editState.currentTool !== 'mapdraw') {
+        handlePointerMove(event); 
+        event.stopPropagation();
+      } else {
+        handlePointerMove(event);
+      }
+    }"
+    @pointerup="(event) => { 
+      if (editState.currentTool !== 'mapdraw') {
+        handlePointerUp(event); 
+        event.stopPropagation();
+      } else {
+        handlePointerUp(event);
+      }
+    }"
     @wheel="handleWheel"
   >
     <canvas class="main-canvas"></canvas>

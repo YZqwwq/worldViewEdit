@@ -376,31 +376,22 @@ function goBack() {
   }
 }
 
-// 处理绘图工具变化
-function handleDrawToolChange(event: { tool: string }) {
-  // 调用WorldMapCanvas的方法处理绘图工具变化
+// 处理绘图工具面板的事件
+function handleDrawToolChange(event: { tool: DrawToolType }) {
   if (mapCanvasRef.value) {
-    mapCanvasRef.value.handleDrawToolChange(event.tool as DrawToolType);
-  } else {
-    console.warn('地图画布引用不可用，无法设置绘图工具');
+    mapCanvasRef.value.handleDrawToolChange(event.tool);
   }
 }
 
 function handleTerrainChange(terrain: string) {
-  // 调用WorldMapCanvas的方法处理地形类型变化
   if (mapCanvasRef.value) {
     mapCanvasRef.value.handleTerrainChange(terrain);
-  } else {
-    console.warn('地图画布引用不可用，无法设置地形类型');
   }
 }
 
 function handleWidthChange(width: number) {
-  // 调用WorldMapCanvas的方法处理线条宽度变化
   if (mapCanvasRef.value) {
     mapCanvasRef.value.handleLineWidthChange(width);
-  } else {
-    console.warn('地图画布引用不可用，无法设置线条宽度');
   }
 }
 

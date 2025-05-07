@@ -151,7 +151,6 @@ export function useLayerManager() {
     const layer = layerMap.value[id];
     if (layer) {
       layer.visible.value = visible;
-      console.log(`已切换图层 ${id} 可见性为 ${visible}`);
     } else {
       console.log(`已预设图层 ${id} 可见性为 ${visible}（图层尚未创建）`);
     }

@@ -102,7 +102,6 @@ const layers = [
 function toggleLayerVisibility(layerId: string) {
   // 使用图层管理器切换可见性
   layerManager.toggleLayer(layerId);
-  console.log(`切换图层 ${layerId} 可见性为: ${layerManager.getLayerVisibility(layerId)}`);
   
   // 如果有画布引用，只重新渲染被切换的图层
   if (props.mapCanvasRef) {

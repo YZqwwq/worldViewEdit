@@ -60,7 +60,10 @@ export function createMapLayer(
   
   try {
     const baseLayer = createBaseLayer(config);
-  
+    
+    // 确保地图图层可接收鼠标事件
+    baseLayer.canvas.style.pointerEvents = 'auto';
+    
     // 图像缓存
     const imageRef = ref<HTMLImageElement | null>(null);
     const isImageLoading = ref(false);
