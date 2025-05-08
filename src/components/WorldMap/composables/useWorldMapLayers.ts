@@ -92,6 +92,7 @@ export function useWorldMapLayers(props: {
       mouseX?: Ref<number>;
       mouseY?: Ref<number>;
       currentLocationId?: Ref<string>;
+      layerTools?: any;
     }
   ) {
     if (!container) {
@@ -110,7 +111,8 @@ export function useWorldMapLayers(props: {
       connectionStartId = ref(''),
       mouseX = ref(0),
       mouseY = ref(0),
-      currentLocationId = ref('') 
+      currentLocationId = ref(''),
+      layerTools
     } = viewProps;
     
     console.log('正在初始化世界地图图层系统...');
@@ -135,7 +137,7 @@ export function useWorldMapLayers(props: {
         offsetX,
         offsetY,
         scale,
-        defaultMapId
+        defaultMapId,
       ));
       
       // 势力范围图层

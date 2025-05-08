@@ -35,63 +35,55 @@ export function useMapInteractions(
   // 当前指针下的位置ID
   const hoveredLocationId = ref<string | null>(null);
   
+  // 将屏幕坐标转换为地图坐标
+  function screenToMapCoords(x: number, y: number): { x: number, y: number } {
+    const viewState = mapData.getViewState();
+    return {
+      x: (x - viewState.offsetX) / viewState.scale,
+      y: (y - viewState.offsetY) / viewState.scale
+    };
+  }
+  
   // 检查点是否在位置节点上
   function isPointInLocation(x: number, y: number, location: any): boolean {
-    // 确保location对象存在且包含必要属性
+    // x, y 已为地图坐标
     if (!location || !location.position || location.position.offsetX === undefined || location.position.offsetY === undefined) {
       return false;
     }
-    
-    const viewState = mapData.getViewState();
-    const locX = viewState.offsetX + location.position.offsetX * viewState.scale;
-    const locY = viewState.offsetY + location.position.offsetY * viewState.scale;
     const radius = location.id === currentLocationId.value ? 6 : 4;
-    
-    // 计算点到位置中心的距离
-    const distance = Math.sqrt(Math.pow(x - locX, 2) + Math.pow(y - locY, 2));
-    
-    // 如果距离小于半径，说明点在位置内部
+    const distance = Math.sqrt(
+      Math.pow(x - location.position.offsetX, 2) +
+      Math.pow(y - location.position.offsetY, 2)
+    );
     return distance <= radius;
   }
   
   // 查找指针位置下的节点
-  function findLocationUnderCursor(x: number, y: number): string | null {
+  function findLocationUnderCursor(screenX: number, screenY: number): string | null {
     const locations = mapData.getLocations();
     if (!locations || locations.length === 0) return null;
-    
-    // 从后向前查找（顶层优先）
+    const mapPt = screenToMapCoords(screenX, screenY);
     for (let i = locations.length - 1; i >= 0; i--) {
       const location = locations[i];
-      if (!location || !location.id) continue; // 跳过无效的位置
-      
-      if (isPointInLocation(x, y, location)) {
+      if (!location || !location.id) continue;
+      if (isPointInLocation(mapPt.x, mapPt.y, location)) {
         return location.id;
       }
     }
-    
     return null;
   }
   
   // 检查点是否在地图范围内
-  function isPointInMap(x: number, y: number): boolean {
+  function isPointInMap(screenX: number, screenY: number): boolean {
     const viewState = mapData.getViewState();
-    const mapRect = getMapRect(viewState.offsetX, viewState.offsetY, viewState.scale);
-    
+    const mapRect = getMapRect(0, 0, 1); // 地图原始坐标
+    const mapPt = screenToMapCoords(screenX, screenY);
     return (
-      x >= mapRect.x &&
-      x <= mapRect.x + mapRect.width &&
-      y >= mapRect.y &&
-      y <= mapRect.y + mapRect.height
+      mapPt.x >= mapRect.x &&
+      mapPt.x <= mapRect.x + mapRect.width &&
+      mapPt.y >= mapRect.y &&
+      mapPt.y <= mapRect.y + mapRect.height
     );
-  }
-  
-  // 将屏幕坐标转换为地图坐标
-  function screenToMapCoords(x: number, y: number): { offsetX: number, offsetY: number } {
-    const viewState = mapData.getViewState();
-    const mapX = Math.round((x - viewState.offsetX) / viewState.scale);
-    const mapY = Math.round((y - viewState.offsetY) / viewState.scale);
-    
-    return { offsetX: mapX, offsetY: mapY };
   }
   
   // 处理指针按下事件
@@ -241,8 +233,8 @@ export function useMapInteractions(
         type: 'default',
         importance: 'normal',
         position: {
-          offsetX: mapCoords.offsetX,
-          offsetY: mapCoords.offsetY
+          offsetX: mapCoords.x,
+          offsetY: mapCoords.y
         },
         description: '',
         territories: [],

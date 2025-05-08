@@ -63,21 +63,22 @@ export function useMapCanvas(
     
     console.log('初始化多图层地图画布系统', canvasContainerRef.value);
     
-    // 使用worldMapLayers初始化图层
+    // 使用worldMapLayers初始化图层，并传递drawTools实例
     worldMapLayers.initializeLayers(canvasContainerRef.value, {
-          isDarkMode,
-          offsetX,
-          offsetY,
-          scale,
-          mapData,
+      isDarkMode,
+      offsetX,
+      offsetY,
+      scale,
+      mapData,
       isDrawingConnection: ref(false),
       connectionStartId: ref(''),
       mouseX: ref(0),
       mouseY: ref(0),
-          currentLocationId
+      currentLocationId,
+      layerTools: drawTools // 传递drawTools实例
     });
       
-      // 调试当前图层状态
+    // 调试当前图层状态
     worldMapLayers.layerManager.debug();
 
     // 全局注册图层管理器，便于调试
@@ -167,6 +168,7 @@ export function useMapCanvas(
     offsetY,
     scale,
     canvasContainerRef,
+    LAYER_IDS.MAP,
     layerManager
   );
   

@@ -2,6 +2,7 @@ import { ref, Ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { Layer } from './useLayerFactory';
 import { LAYER_IDS } from './useMapCanvas';
 import { useLayerManagerContext, useLayerManager } from './useLayerManager';
+import { useMapCacheStore } from '../utils/mapCacheStore';
 
 // 定义绘图工具类型
 export type DrawToolType = 'pen' | 'eraser' | 'select';
@@ -37,6 +38,10 @@ export type LayerToolsReturnType = {
   draw: (x: number, y: number) => void;
   stopDrawing: () => void;
   getDrawingContext: () => CanvasRenderingContext2D | null;
+  // 新缓存API
+  renderCacheTo: (ctx: CanvasRenderingContext2D, offsetX: number, offsetY: number, scale: number) => void;
+  clearCache: () => void;
+  toDataURL: (type?: string) => string;
 };
 
 /**
@@ -47,6 +52,7 @@ export type LayerToolsReturnType = {
  * @param offsetY 视图Y偏移量
  * @param scale 视图缩放比例
  * @param canvasContainerRef Canvas容器元素引用
+ * @param layerId 缓存层ID
  * @param externalLayerManager 外部传入的图层管理器实例，优先使用此实例
  */
 export function useLayerTools(
@@ -55,6 +61,7 @@ export function useLayerTools(
   offsetY: Ref<number>,
   scale: Ref<number>,
   canvasContainerRef: Ref<HTMLElement | null>,
+  layerId: string = 'map',
   externalLayerManager?: ReturnType<typeof useLayerManager>
 ): LayerToolsReturnType {
   // 创建绘图状态对象
@@ -71,6 +78,9 @@ export function useLayerTools(
     drawingCache: null,
     cachedScale: 1
   });
+  
+  // 创建绘图缓存
+  const mapCacheStore = useMapCacheStore();
   
   // 优先使用外部传入的图层管理器实例，否则尝试通过inject获取
   let layerManager: ReturnType<typeof useLayerManager> | null = externalLayerManager || null;
@@ -122,29 +132,6 @@ export function useLayerTools(
     return null;
   }
   
-  // 更新绘图缓存
-  function updateDrawingCache() {
-    const ctx = getDrawingContext();
-    if (!ctx) return;
-    
-    try {
-      // 保存当前状态到缓存
-      drawState.value.drawingCache = ctx.getImageData(
-        0, 0, 
-        ctx.canvas.width, 
-        ctx.canvas.height
-      );
-      drawState.value.cachedScale = scale.value;
-      console.log('已更新绘图缓存', {
-        width: ctx.canvas.width,
-        height: ctx.canvas.height,
-        scale: scale.value
-      });
-    } catch (error) {
-      console.error('更新绘图缓存失败:', error);
-    }
-  }
-  
   // 保存当前绘图状态到历史记录
   function saveStateToHistory() {
     const ctx = getDrawingContext();
@@ -178,52 +165,27 @@ export function useLayerTools(
   
   // 撤销操作
   function undo() {
-    if (drawState.value.historyIndex <= 0) {
-      console.log('没有历史记录可撤销');
-      return;
-    }
-    
-    const ctx = getDrawingContext();
-    if (!ctx) return;
-    
-    try {
-      drawState.value.historyIndex--;
-      console.log(`撤销至历史状态 #${drawState.value.historyIndex}`);
-      
-      // 恢复到上一个状态
-      const imageData = drawState.value.drawHistory[drawState.value.historyIndex];
-      ctx.putImageData(imageData, 0, 0);
-      
-      // 更新缓存
-      drawState.value.drawingCache = imageData;
-    } catch (error) {
-      console.error('撤销操作失败:', error);
-    }
+    mapCacheStore.undo(layerId);
   }
   
   // 重做操作
   function redo() {
-    if (drawState.value.historyIndex >= drawState.value.drawHistory.length - 1) {
-      console.log('没有操作可重做');
-      return;
-    }
-    
-    const ctx = getDrawingContext();
-    if (!ctx) return;
-    
-    try {
-      drawState.value.historyIndex++;
-      console.log(`重做至历史状态 #${drawState.value.historyIndex}`);
-      
-      // 恢复到下一个状态
-      const imageData = drawState.value.drawHistory[drawState.value.historyIndex];
-      ctx.putImageData(imageData, 0, 0);
-      
-      // 更新缓存
-      drawState.value.drawingCache = imageData;
-    } catch (error) {
-      console.error('重做操作失败:', error);
-    }
+    mapCacheStore.redo(layerId);
+  }
+  
+  // 清空缓存
+  function clearCache() {
+    mapCacheStore.clear(layerId);
+  }
+  
+  // 渲染缓存
+  function renderCacheTo(ctx: CanvasRenderingContext2D, offsetX: number, offsetY: number, scale: number) {
+    mapCacheStore.renderTo(layerId, ctx);
+  }
+  
+  // 导出图片
+  function toDataURL(type?: string) {
+    return mapCacheStore.toDataURL(layerId, type);
   }
   
   // 开始绘制
@@ -233,11 +195,6 @@ export function useLayerTools(
     drawState.value.lastX = x;
     drawState.value.lastY = y;
     
-    // 检查是否需要更新缓存
-    if (!drawState.value.drawingCache || drawState.value.cachedScale !== scale.value) {
-      updateDrawingCache();
-    }
-    
     // 获取当前活动的图层
     const activeLayer = mapLayer.value || (layerManager ? layerManager.getLayer(LAYER_IDS.MAP) : null);
     
@@ -246,6 +203,13 @@ export function useLayerTools(
       console.log("❗ 绘制无效: 地图图层不存在或不可见");
       console.log("图层状态:", activeLayer ? `存在，可见性=${activeLayer.visible.value}` : "不存在");
       return;
+    }
+    
+    // 初始化绘图缓存
+    if (activeLayer.ctx) {
+      const canvas = activeLayer.ctx.canvas;
+      mapCacheStore.initializeLayer(layerId, canvas.width, canvas.height);
+      console.log("已初始化绘图缓存，尺寸:", canvas.width, canvas.height);
     }
     
     // 确保Canvas可被鼠标点击
@@ -271,8 +235,6 @@ export function useLayerTools(
       return;
     }
     
-    console.log("❗ 准备执行绘制，当前工具:", drawState.value.currentTool);
-    
     // 根据当前工具执行对应的绘制操作
     switch (drawState.value.currentTool) {
       case 'pen':
@@ -294,25 +256,28 @@ export function useLayerTools(
   // 画笔工具实现
   function drawPen(ctx: CanvasRenderingContext2D, x: number, y: number) {
     try {
-      console.log("❗ drawPen 绘制线段", { 
-        from: { x: drawState.value.lastX, y: drawState.value.lastY }, 
-        to: { x, y },
-        color: getTerrainColor(drawState.value.terrainType)
-      });
-      
       ctx.globalCompositeOperation = 'source-over';
       ctx.strokeStyle = getTerrainColor(drawState.value.terrainType);
       ctx.lineWidth = drawState.value.lineWidth;
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      
       // 开始绘制
       ctx.beginPath();
       ctx.moveTo(drawState.value.lastX, drawState.value.lastY);
       ctx.lineTo(x, y);
       ctx.stroke();
-      
-      console.log("❗ 线段绘制完成");
+      // 记录为地图坐标
+      const view = { offsetX: offsetX.value, offsetY: offsetY.value, scale: scale.value };
+      const mapLast = {
+        x: (drawState.value.lastX - view.offsetX) / view.scale,
+        y: (drawState.value.lastY - view.offsetY) / view.scale
+      };
+      const mapNow = {
+        x: (x - view.offsetX) / view.scale,
+        y: (y - view.offsetY) / view.scale
+      };
+      // 直接调用全局Pinia缓存
+      mapCacheStore.drawPen(layerId, [mapLast, mapNow], getTerrainColor(drawState.value.terrainType), drawState.value.lineWidth);
     } catch (error) {
       console.error('❗ 画笔绘制失败:', error);
     }
@@ -322,17 +287,25 @@ export function useLayerTools(
   function drawEraser(ctx: CanvasRenderingContext2D, x: number, y: number) {
     try {
       ctx.globalCompositeOperation = 'destination-out';
-      ctx.lineWidth = drawState.value.lineWidth * 2; // 橡皮擦略宽一些
+      ctx.lineWidth = drawState.value.lineWidth * 2;
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      
-      // 开始擦除
       ctx.beginPath();
       ctx.moveTo(drawState.value.lastX, drawState.value.lastY);
       ctx.lineTo(x, y);
       ctx.stroke();
-      
-      // 恢复绘制模式
+      // 记录为地图坐标
+      const view = { offsetX: offsetX.value, offsetY: offsetY.value, scale: scale.value };
+      const mapLast = {
+        x: (drawState.value.lastX - view.offsetX) / view.scale,
+        y: (drawState.value.lastY - view.offsetY) / view.scale
+      };
+      const mapNow = {
+        x: (x - view.offsetX) / view.scale,
+        y: (y - view.offsetY) / view.scale
+      };
+      // 直接调用全局Pinia缓存
+      mapCacheStore.erase(layerId, [mapLast, mapNow], drawState.value.lineWidth * 2);
       ctx.globalCompositeOperation = 'source-over';
     } catch (error) {
       console.error('橡皮擦擦除失败:', error);
@@ -421,12 +394,13 @@ export function useLayerTools(
     getTerrainColor,
     drawPen,
     drawEraser,
-    updateDrawingCache,
-    
-    // 暴露用于外部调用的绘图方法
+    updateDrawingCache: () => {},
     startDrawing,
     draw,
     stopDrawing,
-    getDrawingContext
+    getDrawingContext,
+    renderCacheTo,
+    clearCache,
+    toDataURL,
   };
 }

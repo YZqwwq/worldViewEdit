@@ -16,9 +16,9 @@ import {
   MAP_BACKGROUND_DARK,
   MAP_BACKGROUND_LIGHT
 } from '../constants/colors';
-import { LRUCache } from '../utils/LRUCache';
 import { ref } from 'vue';
 import { useMapData } from './useMapData';
+import { useMapCacheStore } from '../utils/mapCacheStore';
 
 
 const TILE_SIZE = 256;
@@ -55,29 +55,37 @@ export function createMapLayer(
   offsetX: Ref<number>,
   offsetY: Ref<number>,
   scale: Ref<number>,
-  mapId: string
+  mapId: string,
+  layerId: string = 'map'
 ): Layer {
-  
   try {
     const baseLayer = createBaseLayer(config);
-    
-    // 确保地图图层可接收鼠标事件
     baseLayer.canvas.style.pointerEvents = 'auto';
-    
-    // 图像缓存
+
+    // 全局缓存store
+    const mapCacheStore = useMapCacheStore();
     const imageRef = ref<HTMLImageElement | null>(null);
     const isImageLoading = ref(false);
-    
-    // 低分辨率图片缓存
-    const scaledImagesCache: { [scale: string]: HTMLCanvasElement } = {};
-    // 标记渲染请求ID，防止多次渲染竞争
-    let currentRenderRequestId = 0;
+    let imageLoadedToCache = false;
 
-    // 预加载图片
+    // 预加载图片并写入全局缓存
+    async function preloadAndCacheImage(): Promise<void> {
+      if (imageLoadedToCache) return;
+      if (imageRef.value) {
+        await mapCacheStore.loadImage(layerId, imageRef.value);
+        imageLoadedToCache = true;
+        return;
+      }
+      const img = await preloadImage();
+      imageRef.value = img;
+      await mapCacheStore.loadImage(layerId, img);
+      imageLoadedToCache = true;
+    }
+
+    // 预加载图片（只保留一次底图不存在的处理逻辑）
     function preloadImage(): Promise<HTMLImageElement> {
       if (imageRef.value) return Promise.resolve(imageRef.value);
       if (isImageLoading.value) {
-        // 如果图片已经在加载中，等待加载完成
         return new Promise((resolve, reject) => {
           const checkInterval = setInterval(() => {
             if (imageRef.value) {
@@ -85,34 +93,24 @@ export function createMapLayer(
               resolve(imageRef.value);
             }
           }, 100);
-          
-          // 设置超时防止无限等待
           setTimeout(() => {
             clearInterval(checkInterval);
             reject(new Error('图片加载超时'));
           }, 10000);
         });
       }
-      
       isImageLoading.value = true;
-      
       return new Promise<HTMLImageElement>((resolve, reject) => {
         try {
           const img = new window.Image();
           const worldId = useMapData().getWorldId();
-          
-          // 先检查文件是否存在
           const filePath = `world_${worldId}/images/world_${mapId}.png`;
-          
           window.electronAPI.data.exists(filePath)
             .then(exists => {
-              
-              // 使用自定义协议加载图片
               if (exists) {
                 img.src = `app-resource://world_${worldId}/images/world_${mapId}.png`;
               } else {
-                console.warn(`图片文件 ${filePath} 不存在，使用默认图片`);
-                // 创建一个空白的背景图
+                // 只保留一次底图不存在的处理
                 const canvas = document.createElement('canvas');
                 canvas.width = 1024;
                 canvas.height = 1024;
@@ -127,15 +125,12 @@ export function createMapLayer(
                   img.src = canvas.toDataURL('image/png');
                 }
               }
-              
               img.onload = () => {
                 imageRef.value = img;
                 isImageLoading.value = false;
                 resolve(img);
               };
-              
               img.onerror = (err) => {
-                console.error('图片加载失败:', img.src, err);
                 isImageLoading.value = false;
                 reject(err);
               };
@@ -145,162 +140,40 @@ export function createMapLayer(
               reject(err);
             });
         } catch (error) {
-          console.error("预加载图片过程中出错:", error);
           isImageLoading.value = false;
           reject(error);
         }
       });
     }
-    
-    // 获取或创建缩放版本的图像
-    function getScaledImage(originalImage: HTMLImageElement, targetScale: number): HTMLCanvasElement {
-      // 规范化缩放级别，限制为几个固定值以减少缓存数量
-      let normalizedScale = 1;
-      if (targetScale <= 0.125) normalizedScale = 0.125;
-      else if (targetScale <= 0.25) normalizedScale = 0.25;
-      else if (targetScale <= 0.5) normalizedScale = 0.5;
-      else if (targetScale <= 0.75) normalizedScale = 0.75;
-      
-      const scaleKey = normalizedScale.toString();
-      
-      // 如果已经有缓存，直接返回
-      if (scaledImagesCache[scaleKey]) {
-        return scaledImagesCache[scaleKey];
-      }
-      
-      // 创建新的缩放图像
-      const canvas = document.createElement('canvas');
-      const scaledWidth = Math.floor(originalImage.width * normalizedScale);
-      const scaledHeight = Math.floor(originalImage.height * normalizedScale);
-      canvas.width = scaledWidth;
-      canvas.height = scaledHeight;
-      
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (ctx) {
-        // 使用高质量的图像缩放
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(originalImage, 0, 0, scaledWidth, scaledHeight);
-        
-        // 缓存结果
-        scaledImagesCache[scaleKey] = canvas;
-        return canvas;
-      }
-      
-      // 如果创建失败，返回原始图像尺寸的空白画布
-      const fallbackCanvas = document.createElement('canvas');
-      fallbackCanvas.width = originalImage.width;
-      fallbackCanvas.height = originalImage.height;
-      return fallbackCanvas;
-    }
 
-    // 渲染整个图像而不是瓦片
-    async function renderFullImage(
-      ctx: CanvasRenderingContext2D, 
-      image: HTMLImageElement,
-      viewOffsetX: number,
-      viewOffsetY: number,
-      viewScale: number
-    ) {
-      const requestId = ++currentRenderRequestId;
-      
-      try {
-        // 获取合适缩放级别的图像
-        const sourceImage = viewScale >= 0.75 
-          ? image 
-          : getScaledImage(image, viewScale);
-        
-        // 计算图像在画布上的位置和尺寸
-        const renderWidth = sourceImage.width * viewScale / (sourceImage === image ? 1 : (sourceImage.width / image.width));
-        const renderHeight = sourceImage.height * viewScale / (sourceImage === image ? 1 : (sourceImage.height / image.height));
-        
-        // 检查渲染请求是否仍然有效（可能因为新的缩放/平移操作被取消）
-        if (requestId !== currentRenderRequestId) return;
-        
-        // 清除画布
-        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        
-        // 应用双三次插值进行高质量渲染
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        
-        // 渲染图像
-        ctx.drawImage(
-          sourceImage,
-          0, 0, sourceImage.width, sourceImage.height,
-          viewOffsetX, viewOffsetY, renderWidth, renderHeight
-        );
-      } catch (err) {
-        console.error('渲染图像失败:', err);
-        
-        // 如果渲染失败，显示错误信息
-        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        
-        ctx.font = '20px Arial';
-        ctx.fillStyle = '#ff0000';
-        ctx.textAlign = 'center';
-        ctx.fillText('图像渲染失败', ctx.canvas.width / 2, ctx.canvas.height / 2);
-      }
-    }
-
-    // 重写渲染方法
+    // 渲染方法直接从全局缓存store渲染
     baseLayer.render = async function () {
-      if (!baseLayer.visible.value) {
-        console.log("地图图层不可见，跳过渲染");
-        return;
-      }
-      
+      if (!baseLayer.visible.value) return;
       const ctx = baseLayer.ctx;
       const currentScale = scale.value;
       const currentOffsetX = offsetX.value;
       const currentOffsetY = offsetY.value;
-      
-      try {
-        // 加载原始图像
-        const originalImage = await preloadImage();
-        
-        // 使用新的渲染ID
-        const thisRenderRequest = ++currentRenderRequestId;
-        
-        // 使用requestAnimationFrame确保渲染在下一帧执行
-        requestAnimationFrame(() => {
-          // 检查是否仍然是最新的渲染请求
-          if (thisRenderRequest === currentRenderRequestId) {
-            renderFullImage(ctx, originalImage, currentOffsetX, currentOffsetY, currentScale);
-          }
-        });
-      } catch (error) {
-        
-        // 渲染一个简单的错误提示
-        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        
-        ctx.font = '20px Arial';
-        ctx.fillStyle = '#ff0000';
-        ctx.textAlign = 'center';
-        ctx.fillText('无法加载地图图像', ctx.canvas.width / 2, ctx.canvas.height / 2);
-        
-        // 尝试再次预加载（可能会在下一次渲染中成功）
-        setTimeout(() => {
-          preloadImage().catch(err => console.error('重试预加载图片失败:', err));
-        }, 3000);
-      }
+      await preloadAndCacheImage();
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.save();
+      ctx.setTransform(currentScale, 0, 0, currentScale, currentOffsetX, currentOffsetY);
+      mapCacheStore.renderTo(layerId, ctx); // 只传ctx
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.restore();
     };
 
-    // 预加载图像以加快首次渲染
-    console.log("初始预加载图像");
-    preloadImage().catch(err => console.error('预加载图片失败:', err));
+    // 预加载一次
+    preloadAndCacheImage().catch(err => console.error('底图缓存加载失败:', err));
 
     return baseLayer;
   } catch (error) {
-    console.error("创建地图图层时发生错误:", error);
+    console.error('创建地图图层时发生错误:', error);
     // 返回一个默认图层
     const fallbackLayer = createBaseLayer(config);
     fallbackLayer.render = function() {
       const ctx = fallbackLayer.ctx;
       if (!ctx) return;
-      
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-      
       ctx.font = '20px Arial';
       ctx.fillStyle = '#ff0000';
       ctx.textAlign = 'center';
@@ -323,114 +196,83 @@ export function createGridLayer(
   // 重写渲染方法
   baseLayer.render = function(): void {
     if (!baseLayer.visible.value) return;
-    
     baseLayer.clear();
-    
     const ctx = baseLayer.ctx;
     const gridSize = 15;
-    const scaledGridSize = gridSize * scale.value;
+
+    // 保存原始状态
+    ctx.save();
+    // 设置变换
+    ctx.setTransform(scale.value, 0, 0, scale.value, offsetX.value, offsetY.value);
     
-    // 所有经纬线都使用相同的灰色
+    // 颜色
     const gridColor = isDarkMode.value ? GRID_LINE_DARK : GRID_LINE_LIGHT;
     const mainLineColor = isDarkMode.value ? MAIN_LINE_DARK : MAIN_LINE_LIGHT;
     
-    // 计算地图的真实边界（像素坐标）
-    const mapLeft = offsetX.value;
-    const mapTop = offsetY.value;
-    const mapWidth = 360 * gridSize * scale.value;
-    const mapHeight = 180 * gridSize * scale.value;
+    // 地图边界
+    const mapLeft = 0;
+    const mapTop = 0;
+    const mapWidth = 360 * gridSize;
+    const mapHeight = 180 * gridSize;
     const mapRight = mapLeft + mapWidth;
     const mapBottom = mapTop + mapHeight;
     
-    // 根据当前缩放比例确定网格间隔
-    let gridInterval = 1; // 默认每1度绘制一条线
+    // 网格间隔 - 根据缩放智能调整
+    let gridInterval = 1;
+    if (scale.value < 0.1) gridInterval = 9;
+    else if (scale.value < 0.2) gridInterval = 6;
+    else if (scale.value < 0.4) gridInterval = 3;
+    else if (scale.value < 0.8) gridInterval = 1.5;
+    else if (scale.value < 1.2) gridInterval = 1;
+    else if (scale.value < 2) gridInterval = 0.5;
+    else gridInterval = 0.25;
     
-    // 自适应网格间隔
-    if (scale.value < 0.1) gridInterval = 9; // 极小比例，每45度一条线
-    else if (scale.value < 0.2) gridInterval = 6; // 很小的比例，每10度一条线
-    else if (scale.value < 0.4) gridInterval = 3; // 小比例，每5度一条线
-    else if (scale.value < 0.8) gridInterval = 1.5; // 中等比例，每2度一条线
-    else if (scale.value < 1.2) gridInterval = 1; // 一般比例，每1度一条线
-    else if (scale.value < 2) gridInterval = 0.5; // 较大比例，每0.5度一条线
-    else gridInterval = 0.25; // 最大比例，每0.25度一条线
+    // 线宽 - 根据缩放反向调整
+    // 缩小时线宽相对变粗（1/scale），保证视觉效果
+    let baseLineWidth = 0.5;  // 基础线宽
+    if (scale.value < 0.2) baseLineWidth = 0.8;
+    else if (scale.value < 0.5) baseLineWidth = 0.6;
+    else if (scale.value > 1.5) baseLineWidth = 0.3;
     
-    // 计算间隔后的网格大小
-    const intervalScaledGridSize = gridInterval * scaledGridSize;
+    // 线宽与缩放成反比，确保任何缩放下网格可见性一致
+    // 但设置上下限，避免过粗或过细
+    const lineWidth = Math.min(Math.max(baseLineWidth / scale.value, 0.2), 1.5);
     
-    ctx.save();
     ctx.beginPath();
     ctx.strokeStyle = gridColor;
+    ctx.lineWidth = lineWidth;
     
-    // 根据缩放比例调整线宽：缩小时粗，放大时细
-    if (scale.value < 0.2) {
-      ctx.lineWidth = 0.8; // 小缩放时使用粗线
-    } else {
-      ctx.lineWidth = 0.5; // 大缩放时使用细线
+    // 垂直线
+    for (let longitude = -180; longitude <= 180; longitude += gridInterval) {
+      const x = (longitude + 180) * gridSize;
+      ctx.beginPath();
+      ctx.moveTo(x, mapTop);
+      ctx.lineTo(x, mapBottom);
+      ctx.stroke();
     }
     
-    // 创建剪切区域，只在地图矩形内绘制网格
-    ctx.beginPath();
-    ctx.rect(mapLeft, mapTop, mapWidth, mapHeight);
-    ctx.clip();
-    
-    // 绘制垂直线（经度线）
-    // 正确计算第一条可见的经度线
-    const visibleStartLong = Math.ceil((-offsetX.value / scaledGridSize - 180) / gridInterval) * gridInterval;
-    const startLongX = offsetX.value + (visibleStartLong + 180) * scaledGridSize;
-    
-    // 绘制可见范围内的所有经度线
-    for (let longitude = visibleStartLong; longitude <= 180; longitude += gridInterval) {
-      if (longitude < -180 || longitude > 180) continue; // 跳过超出范围的经度
-      
-      const x = offsetX.value + (longitude + 180) * scaledGridSize;
-      if (x >= mapLeft && x <= mapRight) {
-        // 确保线条不超出地图边界
-        ctx.beginPath();
-        ctx.moveTo(x, mapTop);
-        ctx.lineTo(x, mapBottom);
-        ctx.stroke();
-      }
+    // 水平线
+    for (let latitude = -90; latitude <= 90; latitude += gridInterval) {
+      const y = (latitude + 90) * gridSize;
+      ctx.beginPath();
+      ctx.moveTo(mapLeft, y);
+      ctx.lineTo(mapRight, y);
+      ctx.stroke();
     }
     
-    // 绘制水平线（纬度线）
-    // 正确计算第一条可见的纬度线
-    const visibleStartLat = Math.ceil((-offsetY.value / scaledGridSize - 90) / gridInterval) * gridInterval;
-    const startLatY = offsetY.value + (visibleStartLat + 90) * scaledGridSize;
-    
-    // 绘制可见范围内的所有纬度线
-    for (let latitude = visibleStartLat; latitude <= 90; latitude += gridInterval) {
-      if (latitude < -90 || latitude > 90) continue; // 跳过超出范围的纬度
-      
-      const y = offsetY.value + (latitude + 90) * scaledGridSize;
-      if (y >= mapTop && y <= mapBottom) {
-        // 确保线条不超出地图边界
-        ctx.beginPath();
-        ctx.moveTo(mapLeft, y);
-        ctx.lineTo(mapRight, y);
-        ctx.stroke();
-      }
-    }
-    
-    // 绘制主轴（赤道和本初子午线）
-    // 本初子午线（0度经线）
-    const meridianX = offsetX.value + 180 * scaledGridSize;
-    // 赤道（0度纬线）
-    const equatorY = offsetY.value + 90 * scaledGridSize;
-    
+    // 主轴
+    const meridianX = 180 * gridSize;
+    const equatorY = 90 * gridSize;
     ctx.beginPath();
     ctx.strokeStyle = mainLineColor;
-    ctx.lineWidth = ctx.lineWidth * 1.5; // 主轴线宽是普通线的1.5倍
-    
-    // 本初子午线
+    ctx.lineWidth = lineWidth * 1.5;  // 主轴线宽是普通线的1.5倍
     ctx.moveTo(meridianX, mapTop);
     ctx.lineTo(meridianX, mapBottom);
-    
-    // 赤道
     ctx.moveTo(mapLeft, equatorY);
     ctx.lineTo(mapRight, equatorY);
-    
     ctx.stroke();
     
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.restore();
   };
   
@@ -458,6 +300,8 @@ export function createConnectionLayer(
     
     baseLayer.clear();
     const ctx = baseLayer.ctx;
+    ctx.save();
+    ctx.setTransform(scale.value, 0, 0, scale.value, offsetX.value, offsetY.value);
     
     // 如果没有数据或连接，直接返回
     if (!mapData.value || !mapData.value.connections || mapData.value.connections.length === 0) {
@@ -469,8 +313,6 @@ export function createConnectionLayer(
     }
     
     // 保存当前状态
-    ctx.save();
-    
     // 绘制所有现有连接
     const connections = mapData.value.connections;
     const locations = mapData.value.locations || [];
@@ -491,10 +333,10 @@ export function createConnectionLayer(
       
       if (startLoc && endLoc) {
         // 计算屏幕坐标
-        const startX = offsetX.value + startLoc.x * scale.value;
-        const startY = offsetY.value + startLoc.y * scale.value;
-        const endX = offsetX.value + endLoc.x * scale.value;
-        const endY = offsetY.value + endLoc.y * scale.value;
+        let startX = startLoc.x;
+        let startY = startLoc.y;
+        let endX = endLoc.x;
+        let endY = endLoc.y;
         
         // 绘制连接线
         ctx.beginPath();
@@ -509,6 +351,7 @@ export function createConnectionLayer(
       drawActiveConnection(ctx);
     }
     
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.restore();
   };
   
@@ -519,8 +362,8 @@ export function createConnectionLayer(
     if (!startLoc) return;
     
     // 获取起点坐标
-    const startX = offsetX.value + startLoc.x * scale.value;
-    const startY = offsetY.value + startLoc.y * scale.value;
+    let startX = startLoc.x;
+    let startY = startLoc.y;
     
     // 计算终点（当前鼠标位置或目标位置）
     let endX = mouseX.value;
@@ -530,8 +373,8 @@ export function createConnectionLayer(
     if (currentLocationId.value) {
       const endLoc = mapData.value.locations.find((loc: any) => loc.id === currentLocationId.value);
       if (endLoc) {
-        endX = offsetX.value + endLoc.x * scale.value;
-        endY = offsetY.value + endLoc.y * scale.value;
+        endX = endLoc.x;
+        endY = endLoc.y;
       }
     }
     
@@ -569,20 +412,19 @@ export function createLocationLayer(
     
     baseLayer.clear();
     const ctx = baseLayer.ctx;
+    ctx.save();
+    ctx.setTransform(scale.value, 0, 0, scale.value, offsetX.value, offsetY.value);
     
     // 如果没有位置数据，直接返回
     if (!mapData.value || !mapData.value.locations || mapData.value.locations.length === 0) {
       return;
     }
     
-    // 保存当前状态
-    ctx.save();
-    
     // 绘制所有位置节点
     mapData.value.locations.forEach((location: any) => {
       // 计算屏幕坐标
-      const x = offsetX.value + location.x * scale.value;
-      const y = offsetY.value + location.y * scale.value;
+      let x = location.x;
+      let y = location.y;
       
       // 确定节点样式
       const isSelected = location.id === currentLocationId.value;
@@ -602,6 +444,7 @@ export function createLocationLayer(
       }
     });
     
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.restore();
   };
   
@@ -625,14 +468,13 @@ export function createTerritoryLayer(
     baseLayer.clear();
     
     const ctx = baseLayer.ctx;
+    ctx.save();
+    ctx.setTransform(scale.value, 0, 0, scale.value, offsetX.value, offsetY.value);
     
     // 如果没有地域数据，直接返回
     if (!mapData.value || !mapData.value.territories || mapData.value.territories.length === 0) {
       return;
     }
-    
-    // 保存当前状态
-    ctx.save();
     
     // 绘制所有地域
     mapData.value.territories?.forEach((territory: any) => {
@@ -645,14 +487,14 @@ export function createTerritoryLayer(
         // 绘制地域多边形
         ctx.beginPath();
         const firstPoint = territory.points[0];
-        const startX = offsetX.value + firstPoint.x * scale.value;
-        const startY = offsetY.value + firstPoint.y * scale.value;
-        ctx.moveTo(startX, startY);
+        let x = firstPoint.x;
+        let y = firstPoint.y;
+        ctx.moveTo(x, y);
         
         for (let i = 1; i < territory.points.length; i++) {
           const point = territory.points[i];
-          const x = offsetX.value + point.x * scale.value;
-          const y = offsetY.value + point.y * scale.value;
+          x = point.x;
+          y = point.y;
           ctx.lineTo(x, y);
         }
         
@@ -699,6 +541,7 @@ export function createTerritoryLayer(
       }
     });
     
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.restore();
   };
   
@@ -715,44 +558,45 @@ export function createLabelLayer(
   isDarkMode: Ref<boolean>
 ): Layer {
   const baseLayer = createBaseLayer(config);
-  
-  // 重写渲染方法
   baseLayer.render = function(): void {
     if (!baseLayer.visible.value) return;
-    
     baseLayer.clear();
     const ctx = baseLayer.ctx;
-    
-    // 如果没有位置数据，直接返回
+    ctx.save();
+    ctx.setTransform(scale.value, 0, 0, scale.value, offsetX.value, offsetY.value);
+    const gridSize = 15;
     if (!mapData.value || !mapData.value.locations || mapData.value.locations.length === 0) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.restore();
       return;
     }
     
-    // 保存当前状态
-    ctx.save();
+    // 计算标签字体大小 - 与缩放成反比
+    const baseFontSize = 12;
+    // 先计算期望的字体大小
+    const desiredFontSize = Math.min(Math.max(baseFontSize / scale.value, 10), 24);
+    // 额外除以scale.value来补偿变换矩阵的影响
+    const compensatedFontSize = desiredFontSize / scale.value;
+    ctx.font = `${compensatedFontSize}px Arial`;
     
-    // 设置文本样式
-    ctx.font = '12px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = isDarkMode.value ? TEXT_DARK : TEXT_LIGHT;
     
-    // 绘制所有位置标签
     mapData.value.locations.forEach((location: any) => {
-      // 计算屏幕坐标
-      const x = offsetX.value + location.x * scale.value;
-      const y = offsetY.value + location.y * scale.value;
+      // 假设location有longitude/latitude属性，否则用x/y
+      let x = location.longitude !== undefined ? (location.longitude + 180) * gridSize : location.x;
+      let y = location.latitude !== undefined ? (location.latitude + 90) * gridSize : location.y;
       
-      // 只有在缩放比例足够大时才显示标签
-      if (scale.value > 0.5) {
-        // 绘制标签文本
-        ctx.fillText(location.name, x, y - 15);
-      }
+      // 计算标签偏移量 - 与缩放成反比，确保任何缩放下都有合适间距
+      const labelOffsetY = Math.min(Math.max(10 / scale.value, 5), 20);
+      
+      // 删除scale.value > 0.5的限制，始终显示标签
+      ctx.fillText(location.name, x, y - labelOffsetY);
     });
-    
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.restore();
   };
-  
   return baseLayer;
 }
 
@@ -779,7 +623,9 @@ export function createCoordinateLayer(
   // 格式化纬度
   function formatLatitude(latitude: number): string {
     const abs = Math.abs(latitude);
-    if (latitude <= 0) {  // 修改这里，小于等于0为北纬
+    if (latitude === 0) {
+      return `0°N`; // 明确标识赤道为北纬零度，避免与经度0°标签混淆
+    } else if (latitude <= 0) {  // 保持原有逻辑，小于等于0为北纬(但0°已单独处理)
       return `${abs}°N`;
     } else {
       return `${abs}°S`;
@@ -794,81 +640,84 @@ export function createCoordinateLayer(
     const ctx = baseLayer.ctx;
     
     const gridSize = 15;
-    const scaledGridSize = gridSize * scale.value;
+    // 获取画布尺寸
+    const canvasWidth = ctx.canvas.width;
+    const canvasHeight = ctx.canvas.height;
     
-    // 计算地图边界
-    const mapRect = getMapRect(offsetX.value, offsetY.value, scale.value);
-    const { x: mapLeft, y: mapTop, width: mapWidth, height: mapHeight } = mapRect;
-    const mapRight = mapLeft + mapWidth;
-    const mapBottom = mapTop + mapHeight;
+    // 地图边界 - 原始地图坐标
+    const mapWidth = 360 * gridSize;
+    const mapHeight = 180 * gridSize;
     
-    // 文字颜色
-    const textColor = isDarkMode.value ? TEXT_DARK : TEXT_LIGHT;
+    // 计算当前视口可见的地图区域（地图坐标）
+    const visibleLeft = -offsetX.value / scale.value;
+    const visibleTop = -offsetY.value / scale.value;
+    const visibleRight = visibleLeft + canvasWidth / scale.value;
+    const visibleBottom = visibleTop + canvasHeight / scale.value;
     
-    // 保存当前状态
-    ctx.save();
+    // 将视口坐标转换为经纬度
+    const minLongitude = Math.max(-180, Math.floor((visibleLeft - gridSize) / gridSize) - 180);
+    const maxLongitude = Math.min(180, Math.ceil((visibleRight + gridSize) / gridSize) - 180);
+    const minLatitude = Math.max(-90, Math.floor((visibleTop - gridSize) / gridSize) - 90);
+    const maxLatitude = Math.min(90, Math.ceil((visibleBottom + gridSize) / gridSize) - 90);
     
-    // 设置文本样式
-    ctx.font = '10px Arial';
-    ctx.fillStyle = textColor;
-    
-    // 确定经纬度标注间隔
+    // 间隔设置
     let interval = 10; // 默认每10度标注
-    
-    if (scale.value < 0.2) interval = 15;
-    else if (scale.value < 0.4) interval = 10;
+    if (scale.value < 0.25) interval = 30;
+    else if (scale.value < 0.4) interval = 15;
     else if (scale.value < 0.8) interval = 5;
     else if (scale.value < 1.5) interval = 2.5;
     else interval = 1;
     
-    // 绘制经度标注（横向）
-    for (let lon = -180; lon <= 180; lon += interval) {
-      if (lon === 0) continue; // 跳过0度，因为主轴已经标出
-      
-      const x = offsetX.value + (lon + 180) * scaledGridSize;
-      
-      // 确保在地图区域内
-      if (x >= mapLeft && x <= mapRight) {
-        // 只在顶部显示经度标注
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(formatLongitude(lon), x, mapTop - 5);
-      }
-    }
+    // 文字颜色
+    const textColor = isDarkMode.value ? TEXT_DARK : TEXT_LIGHT;
     
-    // 绘制纬度标注（纵向）
-    for (let lat = -90; lat <= 90; lat += interval) {
-      if (lat === 0) continue; // 跳过0度，因为主轴已经标出
-      
-      const y = offsetY.value + (lat + 90) * scaledGridSize;
-      
-      // 确保在地图区域内
-      if (y >= mapTop && y <= mapBottom) {
-        // 只在左侧显示纬度标注
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(formatLatitude(lat), mapLeft - 5, y);
-      }
-    }
+    // 保存当前绘图状态
+    ctx.save();
     
-    // 绘制原点和主轴标签
-    const originX = offsetX.value + 180 * scaledGridSize; // 经度0度
-    const originY = offsetY.value + 90 * scaledGridSize;  // 纬度0度
-    
-    // 绘制主轴标签
-    ctx.font = '12px Arial';
+    // 计算标签字体大小 - 与缩放成反比
+    // 基础字体大小
+    const baseFontSize = 15;
+    // 先计算期望的字体大小
+    const desiredFontSize = Math.min(Math.max(baseFontSize / scale.value, 15), 16);
+   
+    // 额外除以scale.value来补偿变换矩阵的影响
+    const compensatedFontSize = desiredFontSize / scale.value;
+
+    // 设置相对固定大小的字体
+    ctx.font = `${compensatedFontSize}px Arial`;
     ctx.fillStyle = textColor;
     
-    // 本初子午线标签（只在顶部显示）
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText('0°', originX, mapTop - 5);
+    // 先应用变换 - 这样坐标点会变换，但字体大小会进行额外补偿
+    ctx.setTransform(scale.value, 0, 0, scale.value, offsetX.value, offsetY.value);
     
-    // 赤道标签（只在左侧显示）
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('0°', mapLeft - 5, originY);
+    // 标签位置偏移 - 与缩放成反比，确保任何缩放下都有合适间距
+    const offset = Math.min(Math.max(5 / scale.value, 3), 10);
     
+    // 绘制经度标签（上方）
+    for (let lon = Math.ceil(minLongitude / interval) * interval; lon <= maxLongitude; lon += interval) {
+      if (lon <= -180 || lon >= 180) continue;
+      const x = (lon + 180) * gridSize;
+      const y = 0; // 地图上边缘
+      
+      // 绘制标签
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(formatLongitude(lon), x, y - offset); // 向上偏移
+    }
+    
+    // 绘制纬度标签（左侧）
+    for (let lat = Math.ceil(minLatitude / interval) * interval; lat <= maxLatitude; lat += interval) {
+      const x = 0; // 地图左边缘
+      const y = (lat + 90) * gridSize;
+      
+      // 绘制标签
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(formatLatitude(lat), x - offset, y); // 向左偏移
+    }
+    
+    // 恢复绘图状态
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.restore();
   };
   

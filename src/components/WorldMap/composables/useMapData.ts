@@ -3,7 +3,6 @@ import type { WorldMapData } from '../../../types/map';
 import { useMapStore } from '../../../stores/mapStore';
 import { useWorldStore } from '../../../stores/worldStore';
 import { LAYER_IDS } from '../constants/layerIds';
-import WorldEditorView from '../../../view/WorldEditorView.vue';
 import { useLayerManagerContext } from './useLayerManager';
 
 /**
