@@ -4,6 +4,7 @@ import { LAYER_IDS } from './useMapCanvas';
 import { getMapRect } from './useLayerFactory';
 import { useMapData } from './useMapData';
 import type { Layer } from './useLayerFactory';
+import { useCoordinateTransform } from '../utils/CoordinateTransform';
 
 /**
  * 地图交互管理器
@@ -24,13 +25,23 @@ export function useMapInteractions(
   mouseY: Ref<number>,
   drawMap: () => void,
   layers: Ref<Map<string, Layer>>,
-  // 替换为useMapCanvas的绘图API
-  startDrawing: (x: number, y: number) => void,
-  continueDrawing: (x: number, y: number) => void,
+  // 替换为useMapCanvas的绘图API，注意：现在传递地图坐标而非画布坐标
+  startDrawing: (mapX: number, mapY: number) => void,
+  continueDrawing: (mapX: number, mapY: number) => void,
   stopDrawing: () => void
 ) {
   // 获取地图数据
   const mapData = useMapData();
+  
+  // 获取视图状态
+  const viewState = computed(() => mapData.getViewState());
+  
+  // 创建坐标转换工具
+  const coordTransform = useCoordinateTransform(
+    computed(() => viewState.value.offsetX),
+    computed(() => viewState.value.offsetY),
+    computed(() => viewState.value.scale)
+  );
   
   // 当前指针下的位置ID
   const hoveredLocationId = ref<string | null>(null);
@@ -201,21 +212,24 @@ export function useMapInteractions(
         }
       }
     } 
-    // 对于mapdraw模式，使用useMapCanvas提供的高级绘图API
+    // 对于mapdraw模式，使用高级绘图API
     else if (currentTool === 'mapdraw') {
       console.log('mapdraw模式下的指针事件，调用绘图API');
       
       // 获取MAP图层
       const mapLayer = layers.value.get(LAYER_IDS.MAP);
-      if (mapLayer) {
-        const mapRect = mapLayer.canvas.getBoundingClientRect();
-        const canvasX = e.clientX - mapRect.left;
-        const canvasY = e.clientY - mapRect.top;
-        
-        console.log("开始绘制，坐标:", { canvasX, canvasY });
-        
-        // 调用高级绘图API开始绘制
-        startDrawing(canvasX, canvasY);
+      if (mapLayer && mapLayer.canvas) {
+        // 检查鼠标是否在画布区域内
+        if (coordTransform.isPointInCanvas(e.clientX, e.clientY, mapLayer.canvas)) {
+          // 使用坐标转换工具，直接获取地图坐标
+          const mapCoord = coordTransform.screenToMap(e.clientX, e.clientY, mapLayer.canvas);
+          console.log("开始绘制，地图坐标:", mapCoord);
+          
+          // 调用高级绘图API开始绘制，传递地图坐标
+          startDrawing(mapCoord.x, mapCoord.y);
+        } else {
+          console.log("鼠标不在画布区域内，不执行绘制");
+        }
       } else {
         console.warn("无法获取MAP图层");
       }
@@ -322,7 +336,16 @@ export function useMapInteractions(
     // 如果没有捕获指针，或者不是主指针（例如多点触控），则忽略
     if (!canvasContainerRef.value?.hasPointerCapture(e.pointerId)) return;
 
-    // 获取指针相对于画布容器的坐标
+    // 获取编辑状态
+    const editState = mapData.getEditState();
+    const viewState = mapData.getViewState();
+
+    // 确保编辑状态和视图状态存在
+    if (!editState || !viewState) return;
+
+    // 如果正在拖动
+    if (isDragging.value && editState.currentTool === 'select') {
+       // 获取指针相对于画布容器的坐标
     const rect = canvasContainerRef.value?.getBoundingClientRect();
     if (!rect) return;
 
@@ -335,16 +358,6 @@ export function useMapInteractions(
 
     // 检查指针悬停的位置
     hoveredLocationId.value = findLocationUnderCursor(x, y);
-
-    // 获取编辑状态
-    const editState = mapData.getEditState();
-    const viewState = mapData.getViewState();
-
-    // 确保编辑状态和视图状态存在
-    if (!editState || !viewState) return;
-
-    // 如果正在拖动
-    if (isDragging.value && editState.currentTool === 'select') {
       // 计算拖动距离
       const dx = x - dragStartX.value;
       const dy = y - dragStartY.value;
@@ -367,8 +380,6 @@ export function useMapInteractions(
     // 如果正在绘制连接
     if (isDrawingConnection.value) {
       // 更新当前鼠标位置用于绘制活动连接线
-      dragStartX.value = x; // 复用 dragStart X/Y 来存储当前鼠标位置
-      dragStartY.value = y;
       drawActiveConnection();
     }
     
@@ -376,13 +387,15 @@ export function useMapInteractions(
     if (editState.currentTool === 'mapdraw') {
       // 如果处于绘图状态，调用高级绘图API继续绘制
       const mapLayer = layers.value.get(LAYER_IDS.MAP);
-      if (mapLayer) {
-        const mapRect = mapLayer.canvas.getBoundingClientRect();
-        const canvasX = e.clientX - mapRect.left;
-        const canvasY = e.clientY - mapRect.top;
-        
-        // 调用高级绘图API继续绘制
-        continueDrawing(canvasX, canvasY);
+      if (mapLayer && mapLayer.canvas) {
+        // 检查鼠标是否在画布区域内
+        if (coordTransform.isPointInCanvas(e.clientX, e.clientY, mapLayer.canvas)) {
+          // 使用坐标转换工具，直接获取地图坐标
+          const mapCoord = coordTransform.screenToMap(e.clientX, e.clientY, mapLayer.canvas);
+          
+          // 调用高级绘图API继续绘制，传递地图坐标
+          continueDrawing(mapCoord.x, mapCoord.y);
+        }
       }
     }
   }

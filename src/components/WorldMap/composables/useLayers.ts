@@ -71,11 +71,34 @@ export function createMapLayer(
     // 预加载图片并写入全局缓存
     async function preloadAndCacheImage(): Promise<void> {
       if (imageLoadedToCache) return;
+      
+      // 先初始化缓存，使用固定地图尺寸
+      const GRID_SIZE = 15;
+      const MAP_WIDTH = 360 * GRID_SIZE;
+      const MAP_HEIGHT = 180 * GRID_SIZE;
+      
+      // 检查缓存是否已经初始化
+      if (!mapCacheStore.isLayerInitialized(layerId)) {
+        // 确保缓存使用正确的地图尺寸
+        mapCacheStore.initializeLayer(layerId, MAP_WIDTH, MAP_HEIGHT);
+        console.log(`初始化地图缓存，尺寸: ${MAP_WIDTH}x${MAP_HEIGHT}`);
+      } else {
+        console.log(`地图缓存已初始化，尺寸: ${mapCacheStore.getLayerDimensions(layerId).width}x${mapCacheStore.getLayerDimensions(layerId).height}`);
+      }
+      
+      // 检查缓存中是否已有底图
+      if (mapCacheStore.hasBaseImage(layerId)) {
+        console.log('缓存中已有底图，无需重新加载');
+        imageLoadedToCache = true;
+        return;
+      }
+      
       if (imageRef.value) {
         await mapCacheStore.loadImage(layerId, imageRef.value);
         imageLoadedToCache = true;
         return;
       }
+      
       const img = await preloadImage();
       imageRef.value = img;
       await mapCacheStore.loadImage(layerId, img);
@@ -153,12 +176,45 @@ export function createMapLayer(
       const currentScale = scale.value;
       const currentOffsetX = offsetX.value;
       const currentOffsetY = offsetY.value;
+      
+      // 确保在渲染前已加载和初始化缓存
       await preloadAndCacheImage();
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      
+      // 记录渲染参数，帮助调试
+      console.log(`地图图层渲染 - 画布尺寸: ${ctx.canvas.width}x${ctx.canvas.height}, 缩放: ${currentScale}, 偏移: (${currentOffsetX}, ${currentOffsetY})`);
+      
+      // 确保使用与其他图层相同的变换方式
       ctx.save();
       ctx.setTransform(currentScale, 0, 0, currentScale, currentOffsetX, currentOffsetY);
-      mapCacheStore.renderTo(layerId, ctx); // 只传ctx
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      
+      // 确保缓存已初始化
+      if (mapCacheStore.isLayerInitialized(layerId)) {
+        // 自行实现渲染逻辑，而不是直接调用mapCacheStore.renderTo
+        // 获取离屏缓存上下文，直接绘制到当前画布
+        try {
+          // 从mapCacheStore获取对应图层的MapCache实例
+          const cacheLayer = mapCacheStore.getLayer(layerId);
+          
+          if (cacheLayer && cacheLayer.isInitialized()) {
+            // 直接绘制离屏缓存到当前上下文
+            // 因为外部已经应用了变换矩阵，所以这里直接绘制，不需要再考虑变换
+            const offscreenCanvas = cacheLayer.getOffscreenCanvas();
+            if (offscreenCanvas) {
+              ctx.drawImage(offscreenCanvas, 0, 0);
+            } else {
+              console.error('获取离屏Canvas失败');
+            }
+          } else {
+            console.error('缓存图层未初始化或无效');
+          }
+        } catch (error) {
+          console.error('渲染缓存到画布时出错:', error);
+        }
+      } else {
+        console.error('地图缓存尚未初始化，无法渲染');
+      }
+      
       ctx.restore();
     };
 
