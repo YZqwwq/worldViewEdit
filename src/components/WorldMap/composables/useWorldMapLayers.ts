@@ -28,7 +28,7 @@ export function useWorldMapLayers(props: {
   externalLayerManager?: ReturnType<typeof useLayerManager>;
 }) {
   // 默认值
-  const defaultMapId = props.mapId || 'default';
+  const defaultMapId = props.mapId || '1';
   const autoInit = props.autoInit !== false;
   
   // 获取图层管理器（优先使用外部传入的实例）
@@ -47,6 +47,9 @@ export function useWorldMapLayers(props: {
   // 图层初始化状态
   const isLayersInitialized = ref(false);
   const isLayersReady = ref(false);
+  
+  // 存储全局事件清理函数
+  let cleanupGlobalEvents: (() => void) | undefined;
   
   // 图层配置
   interface LayerConfig {
@@ -112,13 +115,17 @@ export function useWorldMapLayers(props: {
       mouseX = ref(0),
       mouseY = ref(0),
       currentLocationId = ref(''),
-      layerTools
     } = viewProps;
     
     console.log('正在初始化世界地图图层系统...');
     
     // 初始化图层管理器
     layerManager.initLayerManager(container);
+    
+    // 注册全局事件并保存清理函数
+    if (typeof layerManager.registerGlobalEvents === 'function') {
+      cleanupGlobalEvents = layerManager.registerGlobalEvents();
+    }
     
     try {
       // 批量创建所有图层
@@ -291,6 +298,11 @@ export function useWorldMapLayers(props: {
   // 销毁图层
   onBeforeUnmount(() => {
     if (isLayersInitialized.value) {
+      // 清理全局事件
+      if (cleanupGlobalEvents) {
+        cleanupGlobalEvents();
+      }
+      
       // 只有在我们自己创建的图层管理器时才销毁它
       if (!props.externalLayerManager) {
         layerManager.destroyAll();

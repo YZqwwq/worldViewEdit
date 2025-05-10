@@ -21,6 +21,10 @@ export class MapCache {
   private maxHistory: number = 20;
   private initialized: boolean = false;
   private hasBaseImage: boolean = false; // 跟踪底图是否已加载
+  private imageWidth: number = 0;
+  private imageHeight: number = 0;
+  private imageOffsetX: number = 0;
+  private imageOffsetY: number = 0;
 
   constructor() {
     this.offscreenCanvas = document.createElement('canvas');
@@ -105,24 +109,39 @@ export class MapCache {
       
       console.log(`MapCache: 正在加载底图 - 图像尺寸: ${img.width}x${img.height}, Canvas尺寸: ${canvasWidth}x${canvasHeight}`);
       
-      // 强制将整个源图像拉伸/缩放到整个Canvas尺寸
-      this.baseImageCtx.drawImage(
-        img,
-        0, 0, img.width, img.height,  // 源图像区域（整个图像）
-        0, 0, canvasWidth, canvasHeight  // 目标区域（整个Canvas）
-      );
+      // 计算图像与Canvas的比例差异
+      const widthRatio = canvasWidth / img.width;
+      const heightRatio = canvasHeight / img.height;
       
-      // 图像比例信息，用于调试
-      const scaleX = canvasWidth / img.width;
-      const scaleY = canvasHeight / img.height;
+      if (Math.abs(1 - widthRatio) > 0.01 || Math.abs(1 - heightRatio) > 0.01) {
+        console.warn(`警告: 图像尺寸(${img.width}x${img.height})与Canvas尺寸(${canvasWidth}x${canvasHeight})不匹配!`);
+        console.warn(`宽度比例: ${widthRatio.toFixed(2)}, 高度比例: ${heightRatio.toFixed(2)}`);
+        console.warn('这可能导致坐标映射问题，绘图位置可能与鼠标位置不一致');
+      }
       
-      console.log(`底图缩放系数: 宽=${scaleX.toFixed(2)}x, 高=${scaleY.toFixed(2)}x`);
+      // 计算偏移量以居中绘制图像
+      const offsetX = Math.floor((canvasWidth - img.width) / 2);
+      const offsetY = Math.floor((canvasHeight - img.height) / 2);
+      
+      // 记录图像实际尺寸和偏移量，用于坐标映射
+      this.imageWidth = img.width;
+      this.imageHeight = img.height;
+      this.imageOffsetX = offsetX;
+      this.imageOffsetY = offsetY;
+      
+      console.log(`图像将居中绘制，偏移量: X=${offsetX}, Y=${offsetY}`);
+      
+      // 不进行拉伸，保持原图比例绘制并居中显示
+      this.baseImageCtx.drawImage(img, offsetX, offsetY);
       
       // 标记底图已加载
       this.hasBaseImage = true;
       
       // 将底图复制到主缓存Canvas
       this.resetToBaseImage();
+      
+      // 添加最终确认
+      console.log(`底图加载完成 - 当前离屏Canvas尺寸: ${this.offscreenCanvas.width}x${this.offscreenCanvas.height}`);
     }
   }
   
@@ -194,29 +213,6 @@ export class MapCache {
       this.offscreenCtx?.clearRect(0, 0, this.offscreenCanvas.width, this.offscreenCanvas.height);
       this.history = [];
       this.redoStack = [];
-    }
-  }
-
-  /** 
-   * 渲染到目标context（主canvas）
-   * 如果提供viewState，则应用坐标变换
-   * 否则直接渲染，假设外部已经处理了变换
-   */
-  renderTo(ctx: CanvasRenderingContext2D, viewState?: ViewState) {
-    if (!this.initialized) return;
-    
-    if (viewState) {
-      // 如果提供了视图状态，应用坐标变换
-      // 注意：这种情况只应在外部没有应用变换时使用
-      ctx.save();
-      ctx.translate(viewState.offsetX, viewState.offsetY);
-      ctx.scale(viewState.scale, viewState.scale);
-      ctx.drawImage(this.offscreenCanvas, 0, 0);
-      ctx.restore();
-    } else {
-      // 兼容模式，直接渲染
-      // 假设外部已经应用了必要的变换
-      ctx.drawImage(this.offscreenCanvas, 0, 0);
     }
   }
 

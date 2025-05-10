@@ -19,10 +19,7 @@ import {
 import { ref } from 'vue';
 import { useMapData } from './useMapData';
 import { useMapCacheStore } from '../utils/mapCacheStore';
-
-
-const TILE_SIZE = 256;
-const TILE_CACHE_LIMIT = 100;
+import { useCoordinateTransform } from '../utils/CoordinateTransform';
 
 // 创建背景图层
 export function createBackgroundLayer(
@@ -68,6 +65,9 @@ export function createMapLayer(
     const isImageLoading = ref(false);
     let imageLoadedToCache = false;
 
+    // 创建坐标转换工具实例
+    const coordTransform = useCoordinateTransform(offsetX, offsetY, scale);
+
     // 预加载图片并写入全局缓存
     async function preloadAndCacheImage(): Promise<void> {
       if (imageLoadedToCache) return;
@@ -81,9 +81,12 @@ export function createMapLayer(
       if (!mapCacheStore.isLayerInitialized(layerId)) {
         // 确保缓存使用正确的地图尺寸
         mapCacheStore.initializeLayer(layerId, MAP_WIDTH, MAP_HEIGHT);
-        console.log(`初始化地图缓存，尺寸: ${MAP_WIDTH}x${MAP_HEIGHT}`);
       } else {
-        console.log(`地图缓存已初始化，尺寸: ${mapCacheStore.getLayerDimensions(layerId).width}x${mapCacheStore.getLayerDimensions(layerId).height}`);
+        const dims = mapCacheStore.getLayerDimensions(layerId);
+        // 验证缓存尺寸是否与预期地图尺寸匹配
+        if (dims.width !== MAP_WIDTH || dims.height !== MAP_HEIGHT) {
+          console.warn(`警告: 缓存尺寸(${dims.width}x${dims.height})与预期地图尺寸(${MAP_WIDTH}x${MAP_HEIGHT})不匹配!`);
+        }
       }
       
       // 检查缓存中是否已有底图
@@ -94,6 +97,13 @@ export function createMapLayer(
       }
       
       if (imageRef.value) {
+        console.log(`加载图像到缓存, 图像尺寸: ${imageRef.value.width}x${imageRef.value.height}`);
+        // 验证图像尺寸是否与预期地图尺寸匹配
+        if (imageRef.value.width !== MAP_WIDTH || imageRef.value.height !== MAP_HEIGHT) {
+          console.warn(`警告: 图像尺寸(${imageRef.value.width}x${imageRef.value.height})与预期地图尺寸(${MAP_WIDTH}x${MAP_HEIGHT})不匹配!`);
+          console.warn('这可能导致坐标映射问题，绘图位置可能与鼠标位置不一致');
+        }
+        
         await mapCacheStore.loadImage(layerId, imageRef.value);
         imageLoadedToCache = true;
         return;
@@ -101,6 +111,13 @@ export function createMapLayer(
       
       const img = await preloadImage();
       imageRef.value = img;
+      console.log(`加载图像到缓存, 图像尺寸: ${img.width}x${img.height}`);
+      // 验证图像尺寸是否与预期地图尺寸匹配
+      if (img.width !== MAP_WIDTH || img.height !== MAP_HEIGHT) {
+        console.warn(`警告: 图像尺寸(${img.width}x${img.height})与预期地图尺寸(${MAP_WIDTH}x${MAP_HEIGHT})不匹配!`);
+        console.warn('这可能导致坐标映射问题，绘图位置可能与鼠标位置不一致');
+      }
+      
       await mapCacheStore.loadImage(layerId, img);
       imageLoadedToCache = true;
     }
@@ -122,6 +139,12 @@ export function createMapLayer(
           }, 10000);
         });
       }
+      
+      // 先定义地图尺寸常量，确保默认图像与预期尺寸一致
+      const GRID_SIZE = 15;
+      const MAP_WIDTH = 360 * GRID_SIZE;
+      const MAP_HEIGHT = 180 * GRID_SIZE;
+      
       isImageLoading.value = true;
       return new Promise<HTMLImageElement>((resolve, reject) => {
         try {
@@ -131,38 +154,99 @@ export function createMapLayer(
           window.electronAPI.data.exists(filePath)
             .then(exists => {
               if (exists) {
-                img.src = `app-resource://world_${worldId}/images/world_${mapId}.png`;
+                console.log(`加载地图文件: app-resource://world_${worldId}/images/world_${mapId}.png`);
+                
+                // 创建一个临时图像，用于加载原始文件
+                const tempImg = new window.Image();
+                tempImg.onload = () => {
+                  console.log(`原始图像加载完成，尺寸: ${tempImg.width}x${tempImg.height}`);
+                  
+                  // 检查图像尺寸是否符合预期
+                  if (tempImg.width === MAP_WIDTH && tempImg.height === MAP_HEIGHT) {
+                    // 如果尺寸匹配，直接使用加载的图像
+                    console.log('图像尺寸与预期一致，直接使用');
+                    img.src = tempImg.src;
+                  } else {
+                    // 如果尺寸不匹配，创建标准尺寸Canvas并居中绘制原始图像
+                    console.log(`图像尺寸不匹配，将调整为标准尺寸 ${MAP_WIDTH}x${MAP_HEIGHT}`);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = MAP_WIDTH;
+                    canvas.height = MAP_HEIGHT;
+                    
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                      // 先填充透明背景
+                      ctx.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+                      
+                      // 居中绘制原始图像
+                      const offsetX = Math.max(0, Math.floor((MAP_WIDTH - tempImg.width) / 2));
+                      const offsetY = Math.max(0, Math.floor((MAP_HEIGHT - tempImg.height) / 2));
+                      
+                      console.log(`将原始图像(${tempImg.width}x${tempImg.height})居中绘制到标准尺寸Canvas，偏移量: (${offsetX}, ${offsetY})`);
+                      ctx.drawImage(tempImg, offsetX, offsetY);
+                      
+                      // 将处理后的Canvas转换为图像数据
+                      img.src = canvas.toDataURL('image/png');
+                    } else {
+                      // 如果无法获取上下文，回退到使用原始图像
+                      console.error('无法获取Canvas上下文，将使用原始图像');
+                      img.src = tempImg.src;
+                    }
+                  }
+                };
+                
+                tempImg.onerror = (err) => {
+                  console.error('加载原始地图图像失败:', err);
+                  
+                  // 创建默认图像
+                  createDefaultImage();
+                };
+                
+                // 加载原始图像
+                tempImg.src = `app-resource://world_${worldId}/images/world_${mapId}.png`;
               } else {
-                // 只保留一次底图不存在的处理
+                // 地图文件不存在，创建默认图像
+                createDefaultImage();
+              }
+              
+              // 创建默认图像的函数
+              function createDefaultImage() {
+                console.log(`地图文件不存在，创建默认图像 尺寸: ${MAP_WIDTH}x${MAP_HEIGHT}`);
                 const canvas = document.createElement('canvas');
-                canvas.width = 1024;
-                canvas.height = 1024;
+                canvas.width = MAP_WIDTH;  // 使用预期的地图宽度
+                canvas.height = MAP_HEIGHT; // 使用预期的地图高度
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
                   ctx.fillStyle = '#f0f0f0';
-                  ctx.fillRect(0, 0, canvas.width, canvas.height);
+                  ctx.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
                   ctx.font = '24px Arial';
                   ctx.fillStyle = '#666666';
                   ctx.textAlign = 'center';
-                  ctx.fillText(`地图 ${mapId} 尚未创建`, canvas.width / 2, canvas.height / 2);
+                  ctx.fillText(`地图 ${mapId} 尚未创建`, MAP_WIDTH / 2, MAP_HEIGHT / 2);
                   img.src = canvas.toDataURL('image/png');
                 }
               }
+              
               img.onload = () => {
+                console.log(`最终地图图像加载完成，尺寸: ${img.width}x${img.height}`);
                 imageRef.value = img;
                 isImageLoading.value = false;
                 resolve(img);
               };
+              
               img.onerror = (err) => {
+                console.error('地图图像加载失败:', err);
                 isImageLoading.value = false;
                 reject(err);
               };
             })
             .catch(err => {
+              console.error('检查地图文件存在性失败:', err);
               isImageLoading.value = false;
               reject(err);
             });
         } catch (error) {
+          console.error('预加载图像过程中出错:', error);
           isImageLoading.value = false;
           reject(error);
         }
@@ -173,34 +257,34 @@ export function createMapLayer(
     baseLayer.render = async function () {
       if (!baseLayer.visible.value) return;
       const ctx = baseLayer.ctx;
-      const currentScale = scale.value;
-      const currentOffsetX = offsetX.value;
-      const currentOffsetY = offsetY.value;
-      
       // 确保在渲染前已加载和初始化缓存
       await preloadAndCacheImage();
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
       
-      // 记录渲染参数，帮助调试
-      console.log(`地图图层渲染 - 画布尺寸: ${ctx.canvas.width}x${ctx.canvas.height}, 缩放: ${currentScale}, 偏移: (${currentOffsetX}, ${currentOffsetY})`);
-      
+      // 获取地图实际尺寸常量
+      const GRID_SIZE = 15;
+      const MAP_WIDTH = 360 * GRID_SIZE;
+      const MAP_HEIGHT = 180 * GRID_SIZE;
+
       // 确保使用与其他图层相同的变换方式
       ctx.save();
-      ctx.setTransform(currentScale, 0, 0, currentScale, currentOffsetX, currentOffsetY);
+      // 使用坐标转换工具提供的变换参数，确保DPI处理一致性
+      const transformParams = coordTransform.getTransformParams();
+      ctx.setTransform(...transformParams);
       
-      // 确保缓存已初始化
-      if (mapCacheStore.isLayerInitialized(layerId)) {
-        // 自行实现渲染逻辑，而不是直接调用mapCacheStore.renderTo
-        // 获取离屏缓存上下文，直接绘制到当前画布
-        try {
-          // 从mapCacheStore获取对应图层的MapCache实例
-          const cacheLayer = mapCacheStore.getLayer(layerId);
-          
-          if (cacheLayer && cacheLayer.isInitialized()) {
-            // 直接绘制离屏缓存到当前上下文
-            // 因为外部已经应用了变换矩阵，所以这里直接绘制，不需要再考虑变换
+      // 从缓存获取内容并渲染
+      try {
+        // 获取图层缓存
+        const cacheLayer = mapCacheStore.getLayer(layerId);
+        if (cacheLayer) {
+          // 检查缓存是否初始化
+          if (mapCacheStore.isLayerInitialized(layerId)) {
+            // 获取离屏Canvas和其尺寸
             const offscreenCanvas = cacheLayer.getOffscreenCanvas();
+            
             if (offscreenCanvas) {
+              // 直接绘制离屏缓存到当前上下文
+              // 因为外部已经应用了变换矩阵，所以这里直接绘制，不需要再考虑变换
               ctx.drawImage(offscreenCanvas, 0, 0);
             } else {
               console.error('获取离屏Canvas失败');
@@ -208,13 +292,14 @@ export function createMapLayer(
           } else {
             console.error('缓存图层未初始化或无效');
           }
-        } catch (error) {
-          console.error('渲染缓存到画布时出错:', error);
+        } else {
+          console.error('无法获取缓存图层');
         }
-      } else {
-        console.error('地图缓存尚未初始化，无法渲染');
+      } catch (error) {
+        console.error('渲染缓存到画布时出错:', error);
       }
       
+      // 恢复之前的绘图状态
       ctx.restore();
     };
 
@@ -249,6 +334,9 @@ export function createGridLayer(
 ): Layer {
   const baseLayer = createBaseLayer(config);
   
+  // 创建坐标转换工具实例
+  const coordTransform = useCoordinateTransform(offsetX, offsetY, scale);
+  
   // 重写渲染方法
   baseLayer.render = function(): void {
     if (!baseLayer.visible.value) return;
@@ -258,8 +346,9 @@ export function createGridLayer(
 
     // 保存原始状态
     ctx.save();
-    // 设置变换
-    ctx.setTransform(scale.value, 0, 0, scale.value, offsetX.value, offsetY.value);
+    // 设置变换，使用坐标转换工具处理DPI
+    const transformParams = coordTransform.getTransformParams();
+    ctx.setTransform(...transformParams);
     
     // 颜色
     const gridColor = isDarkMode.value ? GRID_LINE_DARK : GRID_LINE_LIGHT;
@@ -328,7 +417,7 @@ export function createGridLayer(
     ctx.lineTo(mapRight, equatorY);
     ctx.stroke();
     
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // 恢复原始状态，使用正确的方式重置变换
     ctx.restore();
   };
   
@@ -350,6 +439,9 @@ export function createConnectionLayer(
 ): Layer {
   const baseLayer = createBaseLayer(config);
   
+  // 创建坐标转换工具实例
+  const coordTransform = useCoordinateTransform(offsetX, offsetY, scale);
+  
   // 重写渲染方法
   baseLayer.render = function(): void {
     if (!baseLayer.visible.value) return;
@@ -357,7 +449,10 @@ export function createConnectionLayer(
     baseLayer.clear();
     const ctx = baseLayer.ctx;
     ctx.save();
-    ctx.setTransform(scale.value, 0, 0, scale.value, offsetX.value, offsetY.value);
+    
+    // 使用坐标转换工具处理DPI
+    const transformParams = coordTransform.getTransformParams();
+    ctx.setTransform(...transformParams);
     
     // 如果没有数据或连接，直接返回
     if (!mapData.value || !mapData.value.connections || mapData.value.connections.length === 0) {
@@ -459,18 +554,23 @@ export function createLocationLayer(
 ): Layer {
   const baseLayer = createBaseLayer(config);
   
-  // 允许鼠标交互
-  baseLayer.canvas.style.pointerEvents = 'auto';
+  // 创建坐标转换工具实例
+  const coordTransform = useCoordinateTransform(offsetX, offsetY, scale);
   
   // 重写渲染方法
   baseLayer.render = function(): void {
     if (!baseLayer.visible.value) return;
-    
     baseLayer.clear();
-    const ctx = baseLayer.ctx;
-    ctx.save();
-    ctx.setTransform(scale.value, 0, 0, scale.value, offsetX.value, offsetY.value);
     
+    const ctx = baseLayer.ctx;
+    
+    // 保存原始状态
+    ctx.save();
+    
+    // 使用坐标转换工具提供的变换参数，确保DPI处理一致性
+    const transformParams = coordTransform.getTransformParams();
+    ctx.setTransform(...transformParams);
+
     // 如果没有位置数据，直接返回
     if (!mapData.value || !mapData.value.locations || mapData.value.locations.length === 0) {
       return;
@@ -517,21 +617,28 @@ export function createTerritoryLayer(
 ): Layer {
   const baseLayer = createBaseLayer(config);
   
+  // 创建坐标转换工具实例
+  const coordTransform = useCoordinateTransform(offsetX, offsetY, scale);
+  
   // 重写渲染方法
   baseLayer.render = function(): void {
     if (!baseLayer.visible.value) return;
-    
     baseLayer.clear();
     
     const ctx = baseLayer.ctx;
-    ctx.save();
-    ctx.setTransform(scale.value, 0, 0, scale.value, offsetX.value, offsetY.value);
     
-    // 如果没有地域数据，直接返回
+    // 如果没有数据或领土，直接返回
     if (!mapData.value || !mapData.value.territories || mapData.value.territories.length === 0) {
       return;
     }
     
+    // 保存当前状态
+    ctx.save();
+    
+    // 使用坐标转换工具提供的变换参数，确保DPI处理一致性
+    const transformParams = coordTransform.getTransformParams();
+    ctx.setTransform(...transformParams);
+
     // 绘制所有地域
     mapData.value.territories?.forEach((territory: any) => {
       if (territory.points && territory.points.length > 2) {
@@ -614,12 +721,32 @@ export function createLabelLayer(
   isDarkMode: Ref<boolean>
 ): Layer {
   const baseLayer = createBaseLayer(config);
+  
+  // 创建坐标转换工具实例
+  const coordTransform = useCoordinateTransform(offsetX, offsetY, scale);
+  
+  // 重写渲染方法
   baseLayer.render = function(): void {
     if (!baseLayer.visible.value) return;
     baseLayer.clear();
+    
     const ctx = baseLayer.ctx;
+    
+    // 如果没有数据或位置，直接返回
+    if (!mapData.value || !mapData.value.locations || mapData.value.locations.length === 0) {
+      return;
+    }
+    
+    // 设置文本样式
+    const textColor = isDarkMode.value ? '#FFFFFF' : '#000000';
+    
+    // 保存当前状态
     ctx.save();
-    ctx.setTransform(scale.value, 0, 0, scale.value, offsetX.value, offsetY.value);
+    
+    // 使用坐标转换工具提供的变换参数，确保DPI处理一致性
+    const transformParams = coordTransform.getTransformParams();
+    ctx.setTransform(...transformParams);
+
     const gridSize = 15;
     if (!mapData.value || !mapData.value.locations || mapData.value.locations.length === 0) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -637,7 +764,7 @@ export function createLabelLayer(
     
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = isDarkMode.value ? TEXT_DARK : TEXT_LIGHT;
+    ctx.fillStyle = textColor;
     
     mapData.value.locations.forEach((location: any) => {
       // 假设location有longitude/latitude属性，否则用x/y
@@ -666,6 +793,9 @@ export function createCoordinateLayer(
 ): Layer {
   const baseLayer = createBaseLayer(config);
   
+  // 创建坐标转换工具实例
+  const coordTransform = useCoordinateTransform(offsetX, offsetY, scale);
+  
   // 格式化经度
   function formatLongitude(longitude: number): string {
     const abs = Math.abs(longitude);
@@ -691,18 +821,26 @@ export function createCoordinateLayer(
   // 重写渲染方法
   baseLayer.render = function(): void {
     if (!baseLayer.visible.value) return;
-    
     baseLayer.clear();
+    if(scale.value < 0.10){
+      return;
+    }
     const ctx = baseLayer.ctx;
     
-    const gridSize = 15;
-    // 获取画布尺寸
-    const canvasWidth = ctx.canvas.width;
-    const canvasHeight = ctx.canvas.height;
+    // 保存当前状态
+    ctx.save();
     
-    // 地图边界 - 原始地图坐标
-    const mapWidth = 360 * gridSize;
-    const mapHeight = 180 * gridSize;
+    // 获取DPI并计算坐标变换参数
+    const dpr = coordTransform.getDpr();
+    const transformParams = coordTransform.getTransformParams();
+    
+    // 使用坐标转换工具提供的变换参数，确保DPI处理一致性
+    ctx.setTransform(...transformParams);
+
+    const gridSize = 15;
+    // 获取画布尺寸（考虑DPI）
+    const canvasWidth = ctx.canvas.width / dpr;
+    const canvasHeight = ctx.canvas.height / dpr;
     
     // 计算当前视口可见的地图区域（地图坐标）
     const visibleLeft = -offsetX.value / scale.value;
@@ -727,14 +865,11 @@ export function createCoordinateLayer(
     // 文字颜色
     const textColor = isDarkMode.value ? TEXT_DARK : TEXT_LIGHT;
     
-    // 保存当前绘图状态
-    ctx.save();
-    
-    // 计算标签字体大小 - 与缩放成反比
+    // 计算标签字体大小 - 与缩放成反比但考虑DPI
     // 基础字体大小
-    const baseFontSize = 15;
-    // 先计算期望的字体大小
-    const desiredFontSize = Math.min(Math.max(baseFontSize / scale.value, 15), 16);
+    const baseFontSize = 12;
+    // 计算期望的字体大小
+    const desiredFontSize = Math.min(Math.max(baseFontSize / scale.value, 12), 13);
    
     // 额外除以scale.value来补偿变换矩阵的影响
     const compensatedFontSize = desiredFontSize / scale.value;
@@ -742,9 +877,6 @@ export function createCoordinateLayer(
     // 设置相对固定大小的字体
     ctx.font = `${compensatedFontSize}px Arial`;
     ctx.fillStyle = textColor;
-    
-    // 先应用变换 - 这样坐标点会变换，但字体大小会进行额外补偿
-    ctx.setTransform(scale.value, 0, 0, scale.value, offsetX.value, offsetY.value);
     
     // 标签位置偏移 - 与缩放成反比，确保任何缩放下都有合适间距
     const offset = Math.min(Math.max(5 / scale.value, 3), 10);
@@ -773,7 +905,6 @@ export function createCoordinateLayer(
     }
     
     // 恢复绘图状态
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.restore();
   };
   

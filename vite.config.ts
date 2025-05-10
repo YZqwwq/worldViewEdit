@@ -18,5 +18,9 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     sourcemap: false
+  },
+  worker: {
+    format: 'es',  // 使用ES模块格式
+    plugins: []    // Worker特有插件配置
   }
 })

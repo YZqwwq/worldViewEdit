@@ -40,66 +40,6 @@ export const useMapCacheStore = defineStore('mapCache', {
     getBaseImageContext(layerId: string): CanvasRenderingContext2D | null {
       return this.getLayer(layerId).getBaseImageContext();
     },
-    drawPen(layerId: string, points: { x: number; y: number }[], color: string, lineWidth: number) {
-      const ctx = this.getContext(layerId);
-      if (!ctx || points.length < 2) return;
-      
-      ctx.save();
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = color;
-      ctx.lineWidth = lineWidth;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      
-      if (points.length >= 3) {
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y);
-        
-        for (let i = 1; i < points.length - 1; i++) {
-          const xc = (points[i].x + points[i + 1].x) / 2;
-          const yc = (points[i].y + points[i + 1].y) / 2;
-          
-          ctx.quadraticCurveTo(
-            points[i].x, 
-            points[i].y,
-            xc, yc
-          );
-        }
-        
-        const lastIndex = points.length - 1;
-        ctx.lineTo(points[lastIndex].x, points[lastIndex].y);
-      } else {
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-          ctx.lineTo(points[i].x, points[i].y);
-        }
-      }
-      
-      ctx.stroke();
-      ctx.restore();
-      this.getLayer(layerId).saveHistory();
-    },
-    erase(layerId: string, points: { x: number; y: number }[], lineWidth: number) {
-      const ctx = this.getContext(layerId);
-      if (!ctx || points.length < 2) return;
-      
-      ctx.save();
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.lineWidth = lineWidth;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      
-      ctx.beginPath();
-      ctx.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(points[i].x, points[i].y);
-      }
-      ctx.stroke();
-      
-      ctx.restore();
-      this.getLayer(layerId).saveHistory();
-    },
     undo(layerId: string) {
       this.getLayer(layerId).undo();
     },
@@ -111,9 +51,6 @@ export const useMapCacheStore = defineStore('mapCache', {
     },
     resetToBaseImage(layerId: string) {
       this.getLayer(layerId).resetToBaseImage();
-    },
-    renderTo(layerId: string, ctx: CanvasRenderingContext2D, viewState?: ViewState) {
-      this.getLayer(layerId).renderTo(ctx, viewState);
     },
   },
 }); 

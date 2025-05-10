@@ -226,10 +226,10 @@ export function useLayerManager() {
   }
   
   // 增加注册全局事件方法
-  function registerGlobalEvents(): void {
+  function registerGlobalEvents(): () => void {
     if (!parentElement.value) {
       console.warn('无法注册全局事件：父元素不存在');
-      return;
+      return () => {}; // 返回空函数
     }
     
     // 监听窗口调整大小
@@ -242,11 +242,11 @@ export function useLayerManager() {
     window.addEventListener('resize', handleResize);
     console.log('已注册全局窗口调整大小事件');
     
-    // 在组件卸载前移除事件监听
-    onBeforeUnmount(() => {
+    // 返回清理函数，让组件自己负责调用
+    return () => {
       window.removeEventListener('resize', handleResize);
       console.log('已移除全局窗口调整大小事件');
-    });
+    };
   }
   
   // 增加图层存在性检查方法
@@ -366,6 +366,7 @@ export function useLayerManager() {
     renderAll,
     renderLayer,
     destroyAll,
+    registerGlobalEvents,
     getAllLayers: () => Object.values(layerMap.value),
     
     // 增加图层调试方法
