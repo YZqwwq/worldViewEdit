@@ -107,8 +107,6 @@ export class MapCache {
       const canvasWidth = this.baseImageCanvas.width;
       const canvasHeight = this.baseImageCanvas.height;
       
-      console.log(`MapCache: 正在加载底图 - 图像尺寸: ${img.width}x${img.height}, Canvas尺寸: ${canvasWidth}x${canvasHeight}`);
-      
       // 计算图像与Canvas的比例差异
       const widthRatio = canvasWidth / img.width;
       const heightRatio = canvasHeight / img.height;

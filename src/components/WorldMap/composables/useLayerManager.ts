@@ -259,8 +259,6 @@ export function useLayerManager() {
     canvasWidth.value = width;
     canvasHeight.value = height;
     
-    console.log(`调整所有图层大小为 ${width}x${height}`);
-    
     Object.values(layerMap.value).forEach(layer => {
       try {
         layer.resize(width, height);
