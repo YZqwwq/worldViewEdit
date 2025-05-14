@@ -26,9 +26,9 @@ export function useMapInteractions(
   mouseY: Ref<number>,
   drawMap: () => void,
   layers: Ref<Map<string, Layer>>,
-  // 替换为useMapCanvas的绘图API，注意：现在传递地图坐标而非画布坐标
-  startDrawing: (mapX: number, mapY: number) => void,
-  continueDrawing: (mapX: number, mapY: number) => void,
+  // 修改API签名，接收事件而非坐标
+  startDrawing: (event: PointerEvent) => void,
+  continueDrawing: (event: PointerEvent) => void,
   stopDrawing: () => void
 ) {
   // 获取地图数据
@@ -142,21 +142,17 @@ export function useMapInteractions(
       const mapLayer = layers.value.get(LAYER_IDS.MAP);
       
       if (mapLayer && mapLayer.canvas) {
-        // 使用坐标转换工具，直接获取地图坐标
-        const mapCoord = coordTransform.screenToMap(e.clientX, e.clientY, mapLayer.canvas);
-          
+        // 高亮显示当前指针位置的坐标，帮助诊断
+        console.log(`开始绘制 - 鼠标屏幕坐标: (${e.clientX}, ${e.clientY})`);
+        
         // 使用mapCacheStore进行更精确的坐标检查
         const mapCacheStore = useMapCacheStore();
         const layerId = LAYER_IDS.MAP;
         
         // 首先检查缓存是否已初始化
         if (mapCacheStore.isLayerInitialized(layerId)) {
-          
-          // 高亮显示当前指针位置的坐标，帮助诊断
-          console.log(`开始绘制 - 鼠标屏幕坐标: (${e.clientX}, ${e.clientY}), 地图坐标: (${mapCoord.x.toFixed(2)}, ${mapCoord.y.toFixed(2)})`);
-          
-          // 调用高级绘图API开始绘制，传递地图坐标
-          startDrawing(mapCoord.x, mapCoord.y);
+          // 直接传递事件对象
+          startDrawing(e);
         } else {
           console.log(`地图缓存未初始化，无法执行精确检查`);
         }
@@ -359,9 +355,7 @@ export function useMapInteractions(
     // 确保编辑状态和视图状态存在
     if (!editState || !viewState) return;
 
-    // 如果正在拖动
-    if (isDragging.value && editState.currentTool === 'select') {
-       // 获取指针相对于画布容器的坐标
+    // 获取指针相对于画布容器的坐标
     const rect = canvasContainerRef.value?.getBoundingClientRect();
     if (!rect) return;
 
@@ -374,6 +368,9 @@ export function useMapInteractions(
 
     // 检查指针悬停的位置
     hoveredLocationId.value = findLocationUnderCursor(x, y);
+
+    // 如果正在拖动
+    if (isDragging.value && editState.currentTool === 'select') {
       // 计算拖动距离
       const dx = x - dragStartX.value;
       const dy = y - dragStartY.value;
@@ -404,20 +401,17 @@ export function useMapInteractions(
       // 如果处于绘图状态，调用高级绘图API继续绘制
       const mapLayer = layers.value.get(LAYER_IDS.MAP);
       if (mapLayer && mapLayer.canvas) {
-        // 检查鼠标是否在画布区域内
-                  // 使用坐标转换工具，直接获取地图坐标
-          const mapCoord = coordTransform.screenToMap(e.clientX, e.clientY, mapLayer.canvas);
-          
-          // 使用mapCacheStore进行更精确的坐标检查
-          const mapCacheStore = useMapCacheStore();
-          const layerId = LAYER_IDS.MAP;
-          
-          // 首先检查缓存是否已初始化
-          if (mapCacheStore.isLayerInitialized(layerId)) {
-            continueDrawing(mapCoord.x, mapCoord.y);
-          } else {
-            console.log(`地图缓存未初始化，无法执行精确检查`);
-          }
+        // 使用mapCacheStore进行更精确的坐标检查
+        const mapCacheStore = useMapCacheStore();
+        const layerId = LAYER_IDS.MAP;
+        
+        // 首先检查缓存是否已初始化
+        if (mapCacheStore.isLayerInitialized(layerId)) {
+          // 直接传递事件对象
+          continueDrawing(e);
+        } else {
+          console.log(`地图缓存未初始化，无法执行精确检查`);
+        }
       }
     }
   }

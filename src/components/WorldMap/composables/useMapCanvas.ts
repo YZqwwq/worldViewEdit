@@ -173,12 +173,12 @@ export function useMapCanvas(
   );
   
   // 封装高级绘图API
-  const startDrawing = (x: number, y: number) => {
-    drawTools.startDrawing(x, y);
+  const startDrawing = (event: PointerEvent) => {
+    drawTools.startDrawing(event);
   };
   
-  const continueDrawing = (x: number, y: number) => {
-    drawTools.draw(x, y);
+  const continueDrawing = (event: PointerEvent) => {
+    drawTools.draw(event);
   };
   
   const stopDrawing = () => {
