@@ -4,9 +4,11 @@ import { LAYER_IDS } from './useMapCanvas';
 import { useLayerManagerContext, useLayerManager } from './useLayerManager';
 import { useMapCacheStore } from '../utils/mapCacheStore';
 import { useCoordinateTransform, Coordinate } from '../utils/CoordinateTransform';
-import { useDrawingWorker, Point } from '../utils/useDrawingWorker';
+import { useDrawingWorker } from '../utils/useDrawingWorker';
 // 导入DrawingEngine和相关接口
 import { DrawingEngine, DrawPoint, DrawOptions } from '../utils/DrawingEngine';
+// 导入PathDataManager
+import { PathDatastore } from '../utils/PointsDatastore';
 
 // 定义地图实际尺寸常量
 const GRID_SIZE = 15; // 网格大小，与其他图层保持一致
@@ -25,10 +27,8 @@ interface DrawState {
   lineWidth: number;
   terrainType: string;
   historyIndex: number;
-  maxHistorySteps: number;
   cachedScale: number;
-  currentPoints: DrawPoint[]; // 使用DrawPoint类型
-  maxPoints: number;
+  // 移除 currentPoints 字段，由 PathDatastore管理
   lastTimestamp?: number;
   animationFrameId?: number;
   workerProcessing?: boolean;
@@ -63,6 +63,12 @@ export type LayerToolsReturnType = {
   loadBaseMap: () => void;
 };
 
+// 定义Point类型，用于PathDataManager中的控制点
+interface Point {
+  x: number;
+  y: number;
+}
+
 /**
  * 地图绘图工具，处理地图图层的绘制功能
  * 
@@ -92,10 +98,8 @@ export function useLayerTools(
     lineWidth: 2,
     terrainType: '陆地',
     historyIndex: -1,
-    maxHistorySteps: 20, // 最多保存20步历史
     cachedScale: 1,
-    currentPoints: [],
-    maxPoints: 1500, // 最大点数量
+    // 移除 currentPoints 初始化，由 PathDataManager 管理
     lastTimestamp: undefined, // 上次绘制的时间戳
     animationFrameId: undefined, // 新增动画帧ID
     workerProcessing: false, // 记录Worker处理状态
@@ -125,13 +129,23 @@ export function useLayerTools(
     tool: drawState.value.currentTool,
   });
   
-  // 同步设置到DrawingEngine
+  // 创建PathDataManager实例，用于管理点集
+  const pathDatastore = new PathDatastore({
+    lineWidth: drawState.value.lineWidth,
+    color: getTerrainColor(drawState.value.terrainType),
+    tool: drawState.value.currentTool,
+  });
+  
+  // 同步设置到DrawingEngine和PathDataManager
   function syncEngineOptions() {
-    drawingEngine.setOptions({
+    const options = {
       lineWidth: drawState.value.lineWidth,
       color: getTerrainColor(drawState.value.terrainType),
       tool: drawState.value.currentTool
-    });
+    };
+    
+    drawingEngine.setOptions(options);
+    // 同样更新PathDataManager选项
   }
   
   // 防抖函数，用于控制绘图频率
@@ -368,16 +382,15 @@ export function useLayerTools(
     // 设置绘图状态
     drawState.value.isDrawing = true;
     
-    // 清空点集合
-    drawState.value.currentPoints = [];
+    // 重置 PathDatastore
+    pathDatastore.reset();
     
-    // 使用DrawingEngine提取点
-    const extractedPoints = DrawingEngine.extractPointsFromEvent(
+    // 使用PathDatastore直接提取和添加点
+    pathDatastore.extractAndAddPoints(
       event, 
       coordTransform, 
       activeLayer.canvas
     );
-    drawState.value.currentPoints = extractedPoints;
     drawState.value.lastDrawnPointIndex = 0; // 重置最后绘制点索引
     
     // 确保Canvas可被鼠标点击
@@ -435,26 +448,12 @@ export function useLayerTools(
     // 只在Canvas存在时继续
     if (!activeLayer || !activeLayer.canvas) return;
     
-    // 使用DrawingEngine提取点
-    let pointsToProcess: DrawPoint[] = [];
-    
-    const extractedPoints = DrawingEngine.extractPointsFromEvent(
+    // 使用PathDatastore直接提取和添加点
+    pathDatastore.extractAndAddPoints(
       event, 
       coordTransform, 
       activeLayer.canvas
     );
-    pointsToProcess = extractedPoints;
-    
-    // 如果没有提取到点，直接返回
-    if (pointsToProcess.length === 0) return;
-    
-    // 将新点添加到当前点集合
-    drawState.value.currentPoints = [...drawState.value.currentPoints, ...pointsToProcess];
-
-    // 限制最大点数
-    while (drawState.value.currentPoints.length > drawState.value.maxPoints) {
-      drawState.value.currentPoints.shift();
-    }
     
     // 请求绘制
     requestDrawing();
@@ -521,42 +520,52 @@ export function useLayerTools(
       drawState.value.isDrawing = false;
       
       // 确保最后一次绘制完成
-      if (drawState.value.currentPoints.length > 0) {
+      const drawData = pathDatastore.getIncrementalDrawData();
+      if (drawData.canDraw) {
         requestDrawing();
       }
       
-      // 清空点集合
-      setTimeout(() => {
-        drawState.value.currentPoints = [];
-        drawState.value.lastDrawnPointIndex = -1;
-      }, 100);
+      // 获取最终路径数据，可用于历史记录
+      const finalPath = pathDatastore.finalizePath();
+      
+      // 可以在这里处理最终路径数据，例如保存到历史记录
     }
   }
 
    // 画笔工具实现
    function drawPen() {
     try {
-      const points = drawState.value.currentPoints; // 当前点集合
-
-      if (points.length < 1) return; // 只需要1个点即可绘制
+      // 获取PathDataManager中的增量绘制数据
+      const drawData = pathDatastore.getIncrementalDrawData();
+      
+      // 检查是否有足够的点进行绘制
+      if (!drawData.canDraw) {
+        console.log('点数不足，跳过绘制');
+        return;
+      }
+      
       const cacheCtx = mapCacheStore.getContext(layerId);
       if (!cacheCtx) return;
       
-      // 过滤掉预测点
-      const filteredPoints = points.filter(point => !point.isPredicted);
+      // 记录当前点数量以便调试
+      if (drawData.points.length > 10) {
+        console.log(`当前绘制点数量: ${drawData.points.length}`);
+      }
       
-      // 获取DrawingEngine生成的绘图数据
-      const pathData = drawingEngine.generatePenPath(filteredPoints, {
-        lineWidth: drawState.value.lineWidth,
-        color: getTerrainColor(drawState.value.terrainType),
-        tool: 'pen'
-      });
+      // 使用DrawingEngine的增量绘制方法，只处理新增的点
+      drawingEngine.drawIncrementalPoints(
+        cacheCtx,
+        drawData.points,
+        drawData.newSegmentStartIndex,
+        drawData.points.length - 1,
+        {
+          lineWidth: drawState.value.lineWidth,
+          color: getTerrainColor(drawState.value.terrainType),
+          tool: 'pen',
+          tension: 0.25
+        }
+      );
       
-      // 直接绘制点
-      drawingEngine.drawPoints(cacheCtx, pathData.points, pathData.options);
-      
-      // 重置绘制索引，表示全部完成
-      drawState.value.lastDrawnPointIndex = -1;
     } catch (error) {
       console.error('绘制笔画时出错:', error);
     }
@@ -571,24 +580,28 @@ export function useLayerTools(
   function setCurrentTool(tool: DrawToolType) {
     console.log(`设置当前工具为: ${tool}`);
     drawState.value.currentTool = tool;
-    // 同步到DrawingEngine
-    drawingEngine.setOptions({ tool });
+    // 同步到DrawingEngine和PathDataManager
+    const options = { tool };
+    drawingEngine.setOptions(options);
   }
   
   // 设置线条宽度
   function setLineWidth(width: number) {
     console.log(`设置线宽为: ${width}`);
     drawState.value.lineWidth = width;
-    // 同步到DrawingEngine
-    drawingEngine.setOptions({ lineWidth: width });
+    // 同步到DrawingEngine和PathDataManager
+    const options = { lineWidth: width };
+    drawingEngine.setOptions(options);
   }
   
   // 设置地形类型
   function setTerrainType(terrain: string) {
     console.log(`设置地形类型为: ${terrain}`);
     drawState.value.terrainType = terrain;
-    // 同步到DrawingEngine，设置颜色
-    drawingEngine.setOptions({ color: getTerrainColor(terrain) });
+    // 同步到DrawingEngine和PathDataManager，设置颜色
+    const color = getTerrainColor(terrain);
+    const options = { color };
+    drawingEngine.setOptions(options);
   }
   
   // 确保初始化时MAP图层设置为可接收鼠标事件
