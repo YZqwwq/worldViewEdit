@@ -382,15 +382,9 @@ export function useLayerTools(
     // 设置绘图状态
     drawState.value.isDrawing = true;
     
-    // 重置 PathDatastore
-    pathDatastore.reset();
+    // 启动新的绘制事件生命周期
+    pathDatastore.startPathEvent();
     
-    // 使用PathDatastore直接提取和添加点
-    pathDatastore.extractAndAddPoints(
-      event, 
-      coordTransform, 
-      activeLayer.canvas
-    );
     drawState.value.lastDrawnPointIndex = 0; // 重置最后绘制点索引
     
     // 确保Canvas可被鼠标点击
@@ -447,6 +441,12 @@ export function useLayerTools(
     
     // 只在Canvas存在时继续
     if (!activeLayer || !activeLayer.canvas) return;
+    
+    // 检查PathDatastore是否处于活动状态
+    if (!pathDatastore.isDrawingActive()) {
+      console.warn('PathDatastore不在活动状态，重新激活');
+      pathDatastore.startPathEvent();
+    }
     
     // 使用PathDatastore直接提取和添加点
     pathDatastore.extractAndAddPoints(
@@ -519,21 +519,39 @@ export function useLayerTools(
     if (drawState.value.isDrawing) {
       drawState.value.isDrawing = false;
       
+      // 结束PathDatastore的当前绘制事件
+      pathDatastore.finalizePathEvent();
+      
       // 确保最后一次绘制完成
       const drawData = pathDatastore.getIncrementalDrawData();
       if (drawData.canDraw) {
-        requestDrawing();
+        const cacheCtx = mapCacheStore.getContext(layerId);
+        if (cacheCtx) {
+          // 最后一次完整绘制，确保所有点都被处理
+          drawingEngine.drawPoints(
+            cacheCtx,
+            drawData.points,
+            {
+              lineWidth: drawState.value.lineWidth,
+              color: getTerrainColor(drawState.value.terrainType),
+              tool: 'pen' as const,
+              tension: 0.25
+            }
+          );
+        }
       }
       
       // 获取最终路径数据，可用于历史记录
       const finalPath = pathDatastore.finalizePath();
+      console.log(`绘制事件完成，总点数: ${finalPath.points.length}`);
       
-      // 可以在这里处理最终路径数据，例如保存到历史记录
+      // 刷新显示的画布
+      refreshCanvas();
     }
   }
 
-   // 画笔工具实现
-   function drawPen() {
+  // 画笔工具实现
+  function drawPen() {
     try {
       // 获取PathDataManager中的增量绘制数据
       const drawData = pathDatastore.getIncrementalDrawData();
@@ -547,24 +565,37 @@ export function useLayerTools(
       const cacheCtx = mapCacheStore.getContext(layerId);
       if (!cacheCtx) return;
       
+      // 设置绘制选项
+      const drawOptions: Partial<DrawOptions> = {
+        lineWidth: drawState.value.lineWidth,
+        color: getTerrainColor(drawState.value.terrainType),
+        tool: 'pen' as const,
+        tension: 0.25
+      };
+      
       // 记录当前点数量以便调试
-      if (drawData.points.length > 10) {
+      if (drawData.points.length % 20 === 0) {
         console.log(`当前绘制点数量: ${drawData.points.length}`);
       }
       
-      // 使用DrawingEngine的增量绘制方法，只处理新增的点
-      drawingEngine.drawIncrementalPoints(
-        cacheCtx,
-        drawData.points,
-        drawData.newSegmentStartIndex,
-        drawData.points.length - 1,
-        {
-          lineWidth: drawState.value.lineWidth,
-          color: getTerrainColor(drawState.value.terrainType),
-          tool: 'pen',
-          tension: 0.25
-        }
-      );
+      // 选择绘制策略：点数少时一次性绘制，点数多时增量绘制
+      if (drawData.points.length > 100) {
+        // 大型路径：使用增量绘制方法
+        drawingEngine.drawIncrementalPoints(
+          cacheCtx,
+          drawData.points,
+          drawData.newSegmentStartIndex,
+          drawData.points.length - 1,
+          drawOptions
+        );
+      } else {
+        // 小型路径：整体绘制一次（更快、更平滑）
+        drawingEngine.drawPoints(
+          cacheCtx,
+          drawData.points,
+          drawOptions
+        );
+      }
       
     } catch (error) {
       console.error('绘制笔画时出错:', error);
@@ -662,7 +693,7 @@ export function useLayerTools(
     drawEraser,
     startDrawing,
     draw,
-    continueDrawing, // 添加别名，确保兼容性
+    continueDrawing,
     stopDrawing,
     getDrawingContext,
     renderCacheTo,

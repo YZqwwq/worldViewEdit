@@ -444,6 +444,7 @@ export class DrawingEngine {
     endIdx: number,
     tension: number
   ): void {
+    console.log('points:', points);
     // 移动到第一个点
     ctx.moveTo(points[startIdx].x, points[startIdx].y);
     
