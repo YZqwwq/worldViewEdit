@@ -4,7 +4,6 @@ import { LAYER_IDS } from './useMapCanvas';
 import { useLayerManagerContext, useLayerManager } from './useLayerManager';
 import { useMapCacheStore } from '../utils/mapCacheStore';
 import { useCoordinateTransform, Coordinate } from '../utils/CoordinateTransform';
-import { useDrawingWorker } from '../utils/useDrawingWorker';
 // 导入DrawingEngine和相关接口
 import { DrawingEngine, DrawPoint, DrawOptions } from '../utils/DrawingEngine';
 // 导入PathDataManager
@@ -16,7 +15,7 @@ const MAP_WIDTH = 360 * GRID_SIZE; // 地图宽度（像素）
 const MAP_HEIGHT = 180 * GRID_SIZE; // 地图高度（像素）eraser
 
 // 定义绘图工具类型
-export type DrawToolType = 'pen' | 'eraser' | 'select';
+export type DrawToolType = 'pen' | 'eraser' | 'select' ;
 
 // 定义绘图状态
 interface DrawState {
