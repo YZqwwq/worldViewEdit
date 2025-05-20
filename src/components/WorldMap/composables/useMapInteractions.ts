@@ -7,6 +7,12 @@ import type { Layer } from './useLayerFactory';
 import { useCoordinateTransform } from '../utils/CoordinateTransform';
 import { useMapCacheStore } from '../utils/mapCacheStore';
 
+// 创建简化版的绘图工具接口，只包含撤销和重做功能
+interface DrawToolsActions {
+  undo: () => void;
+  redo: () => void;
+}
+
 /**
  * 地图交互管理器
  * 处理地图的指针和键盘交互
@@ -29,7 +35,9 @@ export function useMapInteractions(
   // 修改API签名，接收事件而非坐标
   startDrawing: (event: PointerEvent) => void,
   continueDrawing: (event: PointerEvent) => void,
-  stopDrawing: () => void
+  stopDrawing: () => void,
+  // 修改参数类型，接受简化版的绘图工具接口
+  drawActions?: DrawToolsActions
 ) {
   // 获取地图数据
   const mapData = useMapData();
@@ -458,6 +466,36 @@ export function useMapInteractions(
     // 获取编辑状态
     const editState = mapData.getEditState();
     if (!editState) return; // 如果没有编辑状态，直接返回
+
+    // 撤销: Ctrl+Z
+    if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'z') {
+      e.preventDefault(); // 阻止默认行为
+      
+      // 如果在绘图模式，使用drawActions的undo方法
+      if (editState.currentTool === 'mapdraw' && drawActions) {
+        console.log('执行绘图撤销操作 (Ctrl+Z)');
+        drawActions.undo();
+        return;
+      }
+      
+      // 未来可以添加其他工具的撤销逻辑
+      return;
+    }
+    
+    // 重做: Ctrl+Shift+Z
+    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z') {
+      e.preventDefault(); // 阻止默认行为
+      
+      // 如果在绘图模式，使用drawActions的redo方法
+      if (editState.currentTool === 'mapdraw' && drawActions) {
+        console.log('执行绘图重做操作 (Ctrl+Shift+Z)');
+        drawActions.redo();
+        return;
+      }
+      
+      // 未来可以添加其他工具的重做逻辑
+      return;
+    }
 
     // Escape键取消当前操作
     if (e.key === 'Escape') {

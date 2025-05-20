@@ -4,10 +4,13 @@ import { LAYER_IDS } from './useMapCanvas';
 import { useLayerManagerContext, useLayerManager } from './useLayerManager';
 import { useMapCacheStore } from '../utils/mapCacheStore';
 import { useCoordinateTransform, Coordinate } from '../utils/CoordinateTransform';
+import { useDrawingWorker } from '../utils/useDrawingWorker';
 // 导入DrawingEngine和相关接口
 import { DrawingEngine, DrawPoint, DrawOptions } from '../utils/DrawingEngine';
 // 导入PathDataManager
 import { PathDatastore } from '../utils/PointsDatastore';
+// 导入历史记录管理器
+import { useLayerToolsHistory, createHistoryItem } from './useLayerToolsHistory';
 
 // 定义地图实际尺寸常量
 const GRID_SIZE = 15; // 网格大小，与其他图层保持一致
@@ -60,6 +63,10 @@ export type LayerToolsReturnType = {
   refreshCanvas: () => void;
   // 新增底图加载函数
   loadBaseMap: () => void;
+  // 新增历史记录相关状态
+  canUndo: Ref<boolean>;
+  canRedo: Ref<boolean>;
+  historyCount: Ref<number>;
 };
 
 // 定义Point类型，用于PathDataManager中的控制点
@@ -134,6 +141,9 @@ export function useLayerTools(
     color: getTerrainColor(drawState.value.terrainType),
     tool: drawState.value.currentTool,
   });
+  
+  // 创建历史记录管理器实例，默认保留30步历史
+  const historyManager = useLayerToolsHistory(30, layerId);
   
   // 同步设置到DrawingEngine和PathDataManager
   function syncEngineOptions() {
@@ -235,25 +245,6 @@ export function useLayerTools(
     } catch (error) {
       console.error('加载底图失败:', error);
     }
-  }
-  
-  // 撤销操作
-  function undo() {
-    mapCacheStore.undo(layerId);
-    refreshCanvas();
-  }
-  
-  // 重做操作
-  function redo() {
-    mapCacheStore.redo(layerId);
-    refreshCanvas();
-  }
-  
-  // 清空缓存
-  function clearCache() {
-    mapCacheStore.clear(layerId);
-    cacheInitialized.value = false;
-    refreshCanvas();
   }
   
   // 渲染缓存到指定context
@@ -562,6 +553,25 @@ export function useLayerTools(
       
       // 获取最终路径数据，可用于历史记录
       const finalPath = pathDatastore.finalizePath();
+      
+      // 如果有足够的点，添加到历史记录
+      if (finalPath.points.length > 2) {
+        const historyItem = createHistoryItem(
+          drawState.value.currentTool,
+          finalPath.points,
+          {
+            lineWidth: drawState.value.lineWidth,
+            color: getTerrainColor(drawState.value.terrainType),
+            tool: drawState.value.currentTool,
+            tension: 0.25
+          },
+          finalPath.eventId
+        );
+        
+        historyManager.addHistory(historyItem);
+        console.log(`已添加历史记录: ${historyItem.id}, 点数: ${finalPath.points.length}`);
+      }
+      
       console.log("原始路径数据", finalPath.originalPoints)
       console.log("未转换原始路径数据", finalPath.untransformedOriginalPoints)
       console.log("合并事件点", finalPath.coalescedPoints)
@@ -670,7 +680,32 @@ export function useLayerTools(
     return draw(event);
   }
   
-  // 导出接口
+  // 撤销操作
+  function undo() {
+    // 调用历史记录管理器的undo方法
+    const prevState = historyManager.undo();
+    // 刷新画布显示
+    refreshCanvas();
+    console.log("执行撤销操作");
+  }
+  
+  // 重做操作
+  function redo() {
+    // 调用历史记录管理器的redo方法
+    const nextState = historyManager.redo();
+    // 刷新画布显示
+    refreshCanvas();
+    console.log("执行重做操作");
+  }
+  
+  // 清空缓存
+  function clearCache() {
+    mapCacheStore.clear(layerId);
+    cacheInitialized.value = false;
+    refreshCanvas();
+  }
+  
+  // 导出接口 - 添加历史记录相关状态
   return {
     drawState,
     setCurrentTool,
@@ -691,5 +726,9 @@ export function useLayerTools(
     toDataURL,
     refreshCanvas,
     loadBaseMap,
+    // 暴露历史记录状态
+    canUndo: historyManager.canUndo,
+    canRedo: historyManager.canRedo,
+    historyCount: historyManager.historyCount
   };
 }

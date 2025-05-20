@@ -168,7 +168,9 @@ const {
   layers,
   startDrawing,
   continueDrawing,
-  stopDrawing
+  stopDrawing,
+  // 传递包含撤销和重做方法的对象
+  { undo: undoDraw, redo: redoDraw }
 );
 
 // 监听绘图工具变化
