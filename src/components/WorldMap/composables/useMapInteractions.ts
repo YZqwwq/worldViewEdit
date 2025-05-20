@@ -343,6 +343,8 @@ export function useMapInteractions(
     }
   }
 
+  let index = 0;
+
   // 处理指针移动事件
   function handlePointerMove(e: PointerEvent) {
     // 如果没有捕获指针，或者不是主指针（例如多点触控），则忽略
@@ -408,6 +410,9 @@ export function useMapInteractions(
         // 首先检查缓存是否已初始化
         if (mapCacheStore.isLayerInitialized(layerId)) {
           // 直接传递事件对象
+          index++;
+          console.log(index, e.clientX, e.clientY)
+          
           continueDrawing(e);
         } else {
           console.log(`地图缓存未初始化，无法执行精确检查`);
@@ -557,9 +562,7 @@ export function useMapInteractions(
   onMounted(() => {
     const container = canvasContainerRef.value;
     if (container) {
-      container.addEventListener('pointerdown', handlePointerDown);
-      container.addEventListener('pointermove', handlePointerMove);
-      container.addEventListener('pointerup', handlePointerUp);
+      // 仅保留wheel事件和keydown事件的绑定
       container.addEventListener('wheel', handleWheel, { passive: false }); // passive: false for preventDefault
       window.addEventListener('keydown', handleKeyDown); // Keydown on window
     }
@@ -568,9 +571,7 @@ export function useMapInteractions(
   onBeforeUnmount(() => {
     const container = canvasContainerRef.value;
     if (container) {
-      container.removeEventListener('pointerdown', handlePointerDown);
-      container.removeEventListener('pointermove', handlePointerMove);
-      container.removeEventListener('pointerup', handlePointerUp);
+      // 与onMounted对应，移除相应的事件监听器
       container.removeEventListener('wheel', handleWheel);
     }
     window.removeEventListener('keydown', handleKeyDown); // Remove keydown listener

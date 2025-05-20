@@ -15,22 +15,29 @@ interface LineSegment {
 export class PathDatastore {
     private points: DrawPoint[] = [];
     private originalPoints: DrawPoint[] = []; // 存储原始点
+    private untransformedOriginalPoints: Point[] = []; // 存储未坐标转换的原始点
+    private coalescedPoints: Point[] = []; // 存储合并事件的点
     private controlPointsCache: Map<number, {cp1: Point, cp2: Point}> = new Map();
     private options: DrawOptions;
     private lastProcessedIndex: number = -1;
     private minPointsToRender: number = 4; // 贝塞尔曲线绘制所需的最小点数
     
-    // 新增属性
+    // 核心状态属性
     private isActive: boolean = false; // 标记是否处于活动状态
     private pathEventId: number = 0; // 当前绘制事件ID，用于区分不同的绘制事件
     private originalPointCount: number = 0; // 记录原始点数
+    private processedBatchCount: number = 0; // 已处理批次计数
     
-    // 简化参数
+    // 简化参数，减少重复参数
     private liveSimplificationEpsilon: number = 0.5;   // 实时简化阈值
     private finalSimplificationEpsilon: number = 0.3;  // 最终简化阈值(更严格)
-    private simplificationThreshold: number = 10;      // 触发简化的点数阈值
-    private enableSimplification: boolean = true;      // 是否启用简化
-    private batchSize: number = 100;                   // 批处理大小
+    private enableSimplification: boolean = false;     // 默认禁用简化
+    private batchSize: number = 50;                    // 统一批处理大小
+    private batchOverlap: number = 10;                 // 批次间重叠点数
+    
+    // 用于验证事件点的辅助属性
+    private lastValidTimestamp: number = 0;
+    private lastValidPoint: Point | null = null;
     
     constructor(options?: Partial<DrawOptions>, minPointsToRender: number = 4) {
       this.options = {
@@ -66,7 +73,11 @@ export class PathDatastore {
       this.pathEventId++; // 增加事件ID，用于识别新的绘制事件
       this.reset(); // 清空现有点
       this.originalPointCount = 0;
-      console.log(`开始新绘制事件 ID: ${this.pathEventId}`);
+      this.processedBatchCount = 0; // 重置批次计数
+      
+      // 重置点验证状态
+      this.lastValidTimestamp = 0;
+      this.lastValidPoint = null;
     }
     
     /**
@@ -78,27 +89,11 @@ export class PathDatastore {
       
       this.isActive = false;
       
-      // 应用最终简化，使用更严格的epsilon值
-      if (this.enableSimplification && this.points.length > this.minPointsToRender) {
-        const originalCount = this.points.length;
-        const startTime = performance.now();
-        
-        // 根据点数量选择简化策略
-        if (this.points.length < 100) {
-          // 少量点：一次性全局简化，使用较严格的epsilon以获得最佳简化效果
-          this.points = this.rdpSimplifyIterative(this.points, this.finalSimplificationEpsilon);
-          console.log('少量简化后点数:', this.points.length);
-        } else {
-          // 大量点：分批处理简化
-          this.points = this.processByBatches(this.points, this.finalSimplificationEpsilon);
-          console.log('大量简化后点数:', this.points.length);
-        }
-        
-        const endTime = performance.now();
-        console.log(`结束绘制事件 ID: ${this.pathEventId}，原始点数: ${originalCount}，简化后点数: ${this.points.length}，简化率: ${((originalCount - this.points.length) / originalCount * 100).toFixed(1)}%，耗时: ${(endTime - startTime).toFixed(2)}ms`);
-      } else {
-        console.log(`结束绘制事件 ID: ${this.pathEventId}，总点数: ${this.points.length}，未应用简化`);
-      }
+      // 已禁用路径简化，只记录点数
+      console.log(`绘制完成，总点数: ${this.points.length}`);
+      
+      // 重置批次处理计数
+      this.processedBatchCount = 0;
     }
     
     /**
@@ -215,148 +210,97 @@ export class PathDatastore {
     }
     
     /**
-     * 分批处理大型点集进行简化
-     * @param points 原始点集
-     * @param epsilon 简化阈值
-     * @returns 简化后的点集
+     * 验证事件点是否有效
+     * 过滤掉可能的异常点：时间倒退、距离过远的点
      */
-    private processByBatches(points: DrawPoint[], epsilon: number): DrawPoint[] {
-      // 点数少于批处理大小时，直接使用一次性简化
-      if (points.length <= this.batchSize) {
-        return this.rdpSimplifyIterative(points, epsilon);
+    private isValidEventPoint(newPoint: Point, timestamp: number): boolean {
+      // 时间戳检查 - 如果时间戳小于上一个有效点，可能是事件乱序
+      if (timestamp < this.lastValidTimestamp && this.lastValidTimestamp - timestamp > 50) {
+        console.log('过滤时间倒退的点', timestamp, this.lastValidTimestamp);
+        return false;
       }
       
-      // 分批处理，确保批次间有重叠，保证连续性
-      const overlap = Math.min(10, Math.floor(this.batchSize * 0.1)); // 批次间重叠点数，最少10点或批大小的10%
-      const result: DrawPoint[] = [];
-      
-      // 处理每个批次
-      for (let i = 0; i < points.length; i += this.batchSize - overlap) {
-        const batchEnd = Math.min(i + this.batchSize, points.length);
-        const batch = points.slice(i, batchEnd);
+      // 距离检查 - 如果与上一个点距离过远，可能是异常点
+      if (this.lastValidPoint) {
+        const dx = newPoint.x - this.lastValidPoint.x;
+        const dy = newPoint.y - this.lastValidPoint.y;
+        const distance = Math.sqrt(dx*dx + dy*dy);
         
-        // 简化当前批次
-        const simplifiedBatch = this.rdpSimplifyIterative(batch, epsilon);
-        
-        // 添加到结果中，但跳过与上一批次重叠的部分
-        if (i === 0) {
-          result.push(...simplifiedBatch);
-        } else {
-          // 跳过重叠的前部分点
-          const skipCount = Math.min(overlap, simplifiedBatch.length / 2); // 确保不会跳过太多点
-          result.push(...simplifiedBatch.slice(skipCount));
+        // 过滤掉距离过远的点（阈值可调整）
+        if (distance > 100) {
+          console.log('过滤距离异常点', distance);
+          return false;
         }
-        
-        if (batchEnd === points.length) break;
       }
       
-      return result;
+      // 更新最后有效点和时间戳
+      this.lastValidPoint = newPoint;
+      this.lastValidTimestamp = timestamp;
+      return true;
     }
-    
-    /**
-     * 计算自适应简化阈值
-     * @param points 点集
-     * @returns 动态计算的简化阈值
-     */
-    private calculateAdaptiveEpsilon(points: DrawPoint[]): number {
-      // 计算平均点间距
-      let totalDistance = 0;
-      for (let i = 1; i < Math.min(points.length, 50); i++) {
-        totalDistance += Math.sqrt(
-          Math.pow(points[i].x - points[i-1].x, 2) + 
-          Math.pow(points[i].y - points[i-1].y, 2)
-        );
-      }
-      
-      const sampleSize = Math.min(points.length - 1, 49);
-      if (sampleSize <= 0) return this.liveSimplificationEpsilon;
-      
-      const averageDistance = totalDistance / sampleSize;
-      
-      // 实时简化使用较宽松的epsilon，保留更多细节
-      // 最终简化时会使用更严格的值
-      return Math.max(0.2, averageDistance * 0.7);
-    }
-    
-    /**
-     * 应用最终简化 - 使用更严格的epsilon值
-     */
-    private applyFinalSimplification(): void {
-      if (this.points.length <= 2) return;
-      
-      // 使用更精确的最终简化阈值
-      const epsilon = this.finalSimplificationEpsilon;
-      
-      // 使用分批处理简化整个路径
-      this.points = this.processByBatches(this.points, epsilon);
-    }
-    
-    /**
-     * 应用实时部分简化
-     * @param newPoints 新添加的点
-     * @returns 简化后的点集
-     */
-    private applyRealtimeSimplification(newPoints: DrawPoint[]): DrawPoint[] {
-      if (newPoints.length <= 2) return newPoints;
-      
-      // 使用自适应阈值
-      const epsilon = this.calculateAdaptiveEpsilon(newPoints);
-      
-      // 对新点应用RDP简化
-      return this.rdpSimplifyIterative(newPoints, epsilon);
-    }
-    
+
     /**
      * 从PointerEvent中提取绘图点
-     * 支持处理coalesced events以获取高精度点集
+     * 支持处理coalesced events以获取高精度点集，并增加验证逻辑
      * @param event 原始指针事件
      * @param coordTransform 坐标转换工具
      * @param canvas 画布元素
-     * @param mapCoord 可选的地图坐标(已废弃，保留以兼容旧代码)
      * @returns 提取的绘图点数组
      */
-    public static extractPointsFromEvent(
+    public extractPointsFromEvent(
       event: PointerEvent, 
       coordTransform: any,
-      canvas: HTMLCanvasElement,
-      mapCoord?: {x: number, y: number}
+      canvas: HTMLCanvasElement
     ): DrawPoint[] {
       const points: DrawPoint[] = [];
       const now = Date.now();
       
-      // 尝试获取合并事件
+      // 重新启用合并事件，但增加验证机制
       if ('getCoalescedEvents' in event && typeof event.getCoalescedEvents === 'function') {
         const events = event.getCoalescedEvents(); // 获取合并事件
         
         // 如果有合并事件，处理所有事件
         if (events.length > 1) {
-          console.log(`获取到${events.length}个合并事件点`);
-          
-          // 添加所有合并事件点
+          // 添加所有合并事件点，但先验证
           for (const e of events) {
-            // 转换事件坐标到地图坐标
-            const pointCoord = coordTransform.screenToMap(e.clientX, e.clientY, canvas);
+            const clientPoint = {x: e.clientX, y: e.clientY};
             
-            // 添加点，包含压力信息和时间戳
-            points.push({
-              x: pointCoord.x,
-              y: pointCoord.y,
-              timestamp: e.timeStamp || now,
-              pressure: e.pressure !== undefined ? e.pressure : 1.0
-            });
+            // 验证点是否有效
+            if (this.isValidEventPoint(clientPoint, e.timeStamp)) {
+              // 记录原始点坐标
+              this.coalescedPoints.push(clientPoint);
+              
+              // 转换事件坐标到地图坐标
+              const pointCoord = coordTransform.screenToMap(e.clientX, e.clientY, canvas);
+              
+              // 添加点，包含压力信息和时间戳
+              points.push({
+                x: pointCoord.x,
+                y: pointCoord.y,
+                timestamp: e.timeStamp || now,
+                pressure: e.pressure !== undefined ? e.pressure : 1.0
+              });
+            }
           }
-          return points;
+          
+          if (points.length > 0) {
+            return points;
+          }
         }
       }
       
-      // 没有合并事件或不支持，使用与合并事件相同的坐标转换逻辑
-      const pointCoord = coordTransform.screenToMap(event.clientX, event.clientY, canvas);
-      points.push({
-        x: pointCoord.x,
-        y: pointCoord.y,
-        timestamp: event.timeStamp || now,
-        pressure: event.pressure !== undefined ? event.pressure : 1.0
-      });
+      // 如果没有合并事件或验证后没有有效点，使用原始事件点
+      const clientPoint = {x: event.clientX, y: event.clientY};
+      if (this.isValidEventPoint(clientPoint, event.timeStamp)) {
+        this.coalescedPoints.push(clientPoint);
+        const pointCoord = coordTransform.screenToMap(event.clientX, event.clientY, canvas);
+        points.push({
+          x: pointCoord.x,
+          y: pointCoord.y,
+          timestamp: event.timeStamp || now,
+          pressure: event.pressure !== undefined ? event.pressure : 1.0
+        });
+      }
       
       return points;
     }
@@ -374,11 +318,10 @@ export class PathDatastore {
       canvas: HTMLCanvasElement
     ): void {
       // 只有在活动状态才添加点
-      if (!this.isActive) {
-        console.warn('尝试在非活动状态添加点');
-      }
+      if (!this.isActive) return;
       
-      const newPoints = PathDatastore.extractPointsFromEvent(event, coordTransform, canvas);
+      this.untransformedOriginalPoints.push({x: event.clientX, y: event.clientY});
+      const newPoints = this.extractPointsFromEvent(event, coordTransform, canvas);
       this.addPoints(newPoints);
     }
     
@@ -391,29 +334,21 @@ export class PathDatastore {
     }
     
     /**
-     * 添加从事件中提取的点，并进行实时简化
+     * 添加从事件中提取的点，并执行渐进式简化
      * @param newPoints 新提取的点数组
      */
     public addPoints(newPoints: DrawPoint[]): void {
-      // 存储原始点用于可能的分析
+      if (!newPoints.length) return;
+      
+      // 存储原始点用于统计和分析
       this.originalPoints.push(...newPoints);
       this.originalPointCount += newPoints.length;
       
-      // 应用实时简化 - 只对较大的新点批次进行简化，减少频繁简化
-      if (this.enableSimplification && newPoints.length > 5) {
-        // 简化新点
-        const simplifiedNewPoints = this.applyRealtimeSimplification(newPoints);
-        
-        // 添加简化后的点
-        this.points.push(...simplifiedNewPoints);
-        
-        if (newPoints.length !== simplifiedNewPoints.length && newPoints.length > 10) {
-          console.log(`实时简化: ${newPoints.length} -> ${simplifiedNewPoints.length} 点`);
-        }
-      } else {
-        // 不简化直接添加
-        this.points.push(...newPoints);
-      }
+      // 添加新点 - 不再进行简化处理
+      this.points.push(...newPoints);
+      
+      // 更新最后处理位置，虽然不再简化，但保持这个值用于其他功能
+      this.lastProcessedIndex = this.points.length - 1;
     }
     
     /**
@@ -431,52 +366,72 @@ export class PathDatastore {
     public setSimplificationParams(params: {
       liveEpsilon?: number;
       finalEpsilon?: number;
-      threshold?: number;
+      batchSize?: number;
+      batchOverlap?: number;
     }): void {
       if (params.liveEpsilon !== undefined) this.liveSimplificationEpsilon = params.liveEpsilon;
       if (params.finalEpsilon !== undefined) this.finalSimplificationEpsilon = params.finalEpsilon;
-      if (params.threshold !== undefined) this.simplificationThreshold = params.threshold;
+      if (params.batchSize !== undefined) this.batchSize = params.batchSize;
+      if (params.batchOverlap !== undefined) this.batchOverlap = params.batchOverlap;
     }
     
-    // 获取增量绘制数据
+    /**
+     * 获取增量绘制数据
+     */
     public getIncrementalDrawData(): {
       points: DrawPoint[],
       newSegmentStartIndex: number,
       options: DrawOptions,
-      canDraw: boolean, // 添加标志位表示是否可以绘制
-      eventId?: number // 新增：绘制事件ID
+      canDraw: boolean,
+      eventId?: number
     } {
       const canDraw = this.points.length >= this.minPointsToRender;
-      const newSegmentStartIndex = Math.max(0, this.lastProcessedIndex - 2);
-      this.lastProcessedIndex = this.points.length - 1;
+      
+      // 当禁用简化时，始终从头绘制整条路径，确保线条连续
+      // 这样在移动过程中不会出现线条中断
+      const newSegmentStartIndex = this.enableSimplification 
+        ? Math.max(0, this.lastProcessedIndex - 2)  // 启用简化时使用增量绘制
+        : 0;                                        // 禁用简化时从头绘制
       
       return {
         points: this.points,
         newSegmentStartIndex,
         options: this.options,
-        canDraw, // 返回是否可以绘制的标志位
-        eventId: this.pathEventId // 返回当前事件ID
+        canDraw,
+        eventId: this.pathEventId
       };
     }
     
-    // 重置点集
+    /**
+     * 重置点集
+     */
     public reset(): void {
       this.points = [];
       this.originalPoints = [];
+      this.untransformedOriginalPoints = [];
+      this.coalescedPoints = []; // 确保重置合并事件点数组
       this.controlPointsCache.clear();
       this.lastProcessedIndex = -1;
       this.originalPointCount = 0;
     }
     
-    // 完成绘制，返回最终路径数据
+    /**
+     * 完成绘制，返回最终路径数据
+     */
     public finalizePath(): {
       points: DrawPoint[],
+      originalPoints: DrawPoint[],
+      untransformedOriginalPoints: Point[],
+      coalescedPoints: Point[],
       options: DrawOptions,
-      eventId?: number, // 绘制事件ID
-      originalPointCount?: number // 原始点数
+      eventId?: number,
+      originalPointCount?: number
     } {
       return {
         points: [...this.points],
+        originalPoints: [...this.originalPoints],
+        untransformedOriginalPoints: [...this.untransformedOriginalPoints],
+        coalescedPoints: [...this.coalescedPoints],
         options: {...this.options},
         eventId: this.pathEventId,
         originalPointCount: this.originalPointCount
@@ -504,5 +459,4 @@ export class PathDatastore {
       if (this.originalPointCount === 0) return 0;
       return (this.originalPointCount - this.points.length) / this.originalPointCount;
     }
-
   }

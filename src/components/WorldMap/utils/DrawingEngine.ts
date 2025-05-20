@@ -444,8 +444,6 @@ export class DrawingEngine {
     endIdx: number,
     tension: number
   ): void {
-    console.log('points:', points);
-    // 移动到第一个点
     ctx.moveTo(points[startIdx].x, points[startIdx].y);
     
     // 如果点数足够，绘制第一段曲线（使用镜像点）

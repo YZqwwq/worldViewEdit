@@ -417,49 +417,6 @@ export function useLayerTools(
   }
   
   /**
-   * 绘制处理函数
-   * @param event 原始指针事件，用于获取坐标和压力等信息
-   */
-  function draw(event: PointerEvent) {
-    if (!drawState.value.isDrawing) return;
-    
-    if (!cacheInitialized.value) {
-      setTimeout(() => { if (cacheInitialized.value) draw(event); }, 50);
-      return;
-    }
-
-    // 保存当前操作ID，以便后续检查操作是否仍然有效
-    const currentOperationId = drawState.value.operationId;
-    
-    // 记录时间戳
-    const now = Date.now();
-    const timeDiff = Math.max(5, now - (drawState.value.lastTimestamp || now));
-    drawState.value.lastTimestamp = now;
-    
-    // 获取当前活动的图层
-    const activeLayer = mapLayer.value || (layerManager ? layerManager.getLayer(LAYER_IDS.MAP) : null);
-    
-    // 只在Canvas存在时继续
-    if (!activeLayer || !activeLayer.canvas) return;
-    
-    // 检查PathDatastore是否处于活动状态
-    if (!pathDatastore.isDrawingActive()) {
-      console.warn('PathDatastore不在活动状态，重新激活');
-      pathDatastore.startPathEvent();
-    }
-    
-    // 使用PathDatastore直接提取和添加点
-    pathDatastore.extractAndAddPoints(
-      event, 
-      coordTransform, 
-      activeLayer.canvas
-    );
-    
-    // 请求绘制
-    requestDrawing();
-  }
-  
-  /**
    * 使用requestAnimationFrame请求绘制
    * 避免过多的绘制调用导致性能问题
    */
@@ -502,6 +459,77 @@ export function useLayerTools(
     });
   }
   
+  /**
+   * 绘制处理函数
+   * @param event 原始指针事件，用于获取坐标和压力等信息
+   */
+  function draw(event: PointerEvent) {
+    if (!drawState.value.isDrawing) return;
+    
+    if (!cacheInitialized.value) {
+      setTimeout(() => { if (cacheInitialized.value) draw(event); }, 50);
+      return;
+    }
+
+    // 获取当前活动的图层
+    const activeLayer = mapLayer.value || (layerManager ? layerManager.getLayer(LAYER_IDS.MAP) : null);
+    
+    // 只在Canvas存在时继续
+    if (!activeLayer || !activeLayer.canvas) return;
+    
+    // 检查PathDatastore是否处于活动状态
+    if (!pathDatastore.isDrawingActive()) {
+      pathDatastore.startPathEvent();
+    }
+    
+    // 使用PathDatastore直接提取和添加点
+    pathDatastore.extractAndAddPoints(
+      event, 
+      coordTransform, 
+      activeLayer.canvas
+    );
+    
+    // 请求绘制
+    requestDrawing();
+  }
+  
+  /**
+   * 获取当前绘制选项
+   */
+  function getDrawOptions(): Partial<DrawOptions> {
+    return {
+      lineWidth: drawState.value.lineWidth,
+      color: getTerrainColor(drawState.value.terrainType),
+      tool: 'pen' as const,
+      tension: 0.25
+    };
+  }
+  
+  /**
+   * 根据点数量选择合适的绘制方法
+   */
+  function drawPathData(ctx: CanvasRenderingContext2D, data: { points: DrawPoint[], newSegmentStartIndex: number }) {
+    const drawOptions = getDrawOptions();
+    
+    if (data.points.length > 100) {
+      // 大型路径：使用增量绘制方法
+      drawingEngine.drawIncrementalPoints(
+        ctx,
+        data.points,
+        data.newSegmentStartIndex,
+        data.points.length - 1,
+        drawOptions
+      );
+    } else {
+      // 小型路径：整体绘制一次（更快、更平滑）
+      drawingEngine.drawPoints(
+        ctx,
+        data.points,
+        drawOptions
+      );
+    }
+  }
+  
   // 结束绘制
   function stopDrawing() {
     // 取消所有待处理的绘图操作
@@ -522,28 +550,23 @@ export function useLayerTools(
       // 结束PathDatastore的当前绘制事件
       pathDatastore.finalizePathEvent();
       
-      // 确保最后一次绘制完成
+      // 确保最后一次绘制完成 - 使用简化后的点
       const drawData = pathDatastore.getIncrementalDrawData();
       if (drawData.canDraw) {
         const cacheCtx = mapCacheStore.getContext(layerId);
         if (cacheCtx) {
-          // 最后一次完整绘制，确保所有点都被处理
-          drawingEngine.drawPoints(
-            cacheCtx,
-            drawData.points,
-            {
-              lineWidth: drawState.value.lineWidth,
-              color: getTerrainColor(drawState.value.terrainType),
-              tool: 'pen' as const,
-              tension: 0.25
-            }
-          );
+          // 使用提取的绘制函数，从头重绘整个路径
+          drawData.newSegmentStartIndex = 0; // 从头开始绘制整个路径
+          drawPathData(cacheCtx, drawData);
         }
       }
       
       // 获取最终路径数据，可用于历史记录
       const finalPath = pathDatastore.finalizePath();
-      console.log(`绘制事件完成，总点数: ${finalPath.points.length}`);
+      console.log("原始路径数据", finalPath.originalPoints)
+      console.log("未转换原始路径数据", finalPath.untransformedOriginalPoints)
+      console.log("合并事件点", finalPath.coalescedPoints)
+      console.log(`绘制事件完成，点数: ${finalPath.points.length}`);
       
       // 刷新显示的画布
       refreshCanvas();
@@ -557,45 +580,13 @@ export function useLayerTools(
       const drawData = pathDatastore.getIncrementalDrawData();
       
       // 检查是否有足够的点进行绘制
-      if (!drawData.canDraw) {
-        console.log('点数不足，跳过绘制');
-        return;
-      }
+      if (!drawData.canDraw) return;
       
       const cacheCtx = mapCacheStore.getContext(layerId);
       if (!cacheCtx) return;
       
-      // 设置绘制选项
-      const drawOptions: Partial<DrawOptions> = {
-        lineWidth: drawState.value.lineWidth,
-        color: getTerrainColor(drawState.value.terrainType),
-        tool: 'pen' as const,
-        tension: 0.25
-      };
-      
-      // 记录当前点数量以便调试
-      if (drawData.points.length % 20 === 0) {
-        console.log(`当前绘制点数量: ${drawData.points.length}`);
-      }
-      
-      // 选择绘制策略：点数少时一次性绘制，点数多时增量绘制
-      if (drawData.points.length > 100) {
-        // 大型路径：使用增量绘制方法
-        drawingEngine.drawIncrementalPoints(
-          cacheCtx,
-          drawData.points,
-          drawData.newSegmentStartIndex,
-          drawData.points.length - 1,
-          drawOptions
-        );
-      } else {
-        // 小型路径：整体绘制一次（更快、更平滑）
-        drawingEngine.drawPoints(
-          cacheCtx,
-          drawData.points,
-          drawOptions
-        );
-      }
+      // 使用提取的绘制函数
+      drawPathData(cacheCtx, drawData);
       
     } catch (error) {
       console.error('绘制笔画时出错:', error);
