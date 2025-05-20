@@ -425,9 +425,17 @@ export function useLayerTools(
       // 标记为无动画帧，但保持hasUnprocessedUpdate状态，直到绘制完成
       drawState.value.animationFrameId = undefined;
       
-      // 执行绘制
+      // 执行绘制 - 根据当前工具选择不同的绘制方法
       if (drawState.value.isDrawing) {
-        drawPen();
+        if (drawState.value.currentTool === 'pen') {
+          drawPen();
+        } else if (drawState.value.currentTool === 'eraser') {
+          const ctx = getDrawingContext();
+          if (ctx) {
+            drawEraser(ctx, null as any); // 第二个参数在此处不使用，传递null
+          }
+        }
+        
         refreshCanvas(); // 确保绘制后立即刷新可见画布
       
         // 如果绘制完成后还有未处理的更新，在一个短暂延迟后再次请求绘制
@@ -498,8 +506,15 @@ export function useLayerTools(
   /**
    * 根据点数量选择合适的绘制方法
    */
-  function drawPathData(ctx: CanvasRenderingContext2D, data: { points: DrawPoint[], newSegmentStartIndex: number }) {
-    const drawOptions = getDrawOptions();
+  function drawPathData(
+    ctx: CanvasRenderingContext2D, 
+    data: { points: DrawPoint[], newSegmentStartIndex: number },
+    overrideOptions?: Partial<DrawOptions>
+  ) {
+    const drawOptions = {
+      ...getDrawOptions(),
+      ...overrideOptions
+    };
     
     if (data.points.length > 100) {
       // 大型路径：使用增量绘制方法
@@ -540,14 +555,31 @@ export function useLayerTools(
       // 结束PathDatastore的当前绘制事件
       pathDatastore.finalizePathEvent();
       
-      // 确保最后一次绘制完成 - 使用简化后的点
+      // 确保最后一次绘制完成
       const drawData = pathDatastore.getIncrementalDrawData();
       if (drawData.canDraw) {
         const cacheCtx = mapCacheStore.getContext(layerId);
         if (cacheCtx) {
-          // 使用提取的绘制函数，从头重绘整个路径
-          drawData.newSegmentStartIndex = 0; // 从头开始绘制整个路径
-          drawPathData(cacheCtx, drawData);
+          // 根据当前工具类型处理最终绘制
+          if (drawState.value.currentTool === 'eraser') {
+            // 橡皮擦模式
+            cacheCtx.save();
+            cacheCtx.globalCompositeOperation = 'destination-out';
+            
+            // 从头重绘整个路径
+            drawData.newSegmentStartIndex = 0;
+            drawPathData(cacheCtx, drawData, {
+              lineWidth: drawState.value.lineWidth * 2,
+              color: '#ffffff',
+              tool: 'eraser'
+            });
+            
+            cacheCtx.restore();
+          } else {
+            // 画笔模式
+            drawData.newSegmentStartIndex = 0; // 从头开始绘制整个路径
+            drawPathData(cacheCtx, drawData);
+          }
         }
       }
       
@@ -556,12 +588,17 @@ export function useLayerTools(
       
       // 如果有足够的点，添加到历史记录
       if (finalPath.points.length > 2) {
+        // 创建与当前工具对应的历史记录项
         const historyItem = createHistoryItem(
-          drawState.value.currentTool,
+          drawState.value.currentTool, // 'pen' 或 'eraser'
           finalPath.points,
           {
-            lineWidth: drawState.value.lineWidth,
-            color: getTerrainColor(drawState.value.terrainType),
+            lineWidth: drawState.value.currentTool === 'eraser' 
+              ? drawState.value.lineWidth * 2  // 橡皮擦宽度加倍
+              : drawState.value.lineWidth,
+            color: drawState.value.currentTool === 'eraser'
+              ? '#ffffff'  // 橡皮擦颜色不重要
+              : getTerrainColor(drawState.value.terrainType),
             tool: drawState.value.currentTool,
             tension: 0.25
           },
@@ -569,7 +606,7 @@ export function useLayerTools(
         );
         
         historyManager.addHistory(historyItem);
-        console.log(`已添加历史记录: ${historyItem.id}, 点数: ${finalPath.points.length}`);
+        console.log(`已添加${drawState.value.currentTool === 'eraser' ? '橡皮擦' : '画笔'}历史记录: ${historyItem.id}, 点数: ${finalPath.points.length}`);
       }
       
       console.log("原始路径数据", finalPath.originalPoints)
@@ -602,9 +639,56 @@ export function useLayerTools(
     }
   }
   
-  // // 橡皮擦工具实现
+  // 橡皮擦工具实现
   function drawEraser(ctx: CanvasRenderingContext2D, event: PointerEvent) {
-    // 暂时不处理
+    try {
+      // 获取缓存图层上下文
+      const cacheCtx = mapCacheStore.getContext(layerId);
+      if (!cacheCtx) {
+        console.error('无法获取缓存图层上下文');
+        return;
+      }
+      
+      // 保存当前绘图状态
+      cacheCtx.save();
+      
+      // 设置合成操作为"擦除" - 这是橡皮擦效果的核心
+      cacheCtx.globalCompositeOperation = 'destination-out';
+      
+      // 获取PathDataManager中的增量绘制数据
+      const drawData = pathDatastore.getIncrementalDrawData();
+      
+      // 检查是否有足够的点进行绘制
+      if (!drawData.canDraw) {
+        cacheCtx.restore();
+        return;
+      }
+      
+      // 临时保存原始线宽
+      const originalLineWidth = drawState.value.lineWidth;
+      
+      // 将橡皮擦宽度设为画笔的2倍（可根据需要调整）
+      const eraserWidth = originalLineWidth * 2;
+      
+      // 使用提取的绘制函数，应用橡皮擦效果
+      drawPathData(cacheCtx, drawData, {
+        lineWidth: eraserWidth,
+        color: '#ffffff', // 颜色无关紧要，因为我们使用destination-out
+        tool: 'eraser'
+      });
+      
+      // 恢复绘图状态（包括合成模式）
+      cacheCtx.restore();
+      
+    } catch (error) {
+      console.error('执行橡皮擦操作时出错:', error);
+      // 确保状态被恢复
+      if (ctx) ctx.restore();
+      
+      // 获取缓存上下文并确保其合成模式被重置
+      const cacheCtx = mapCacheStore.getContext(layerId);
+      if (cacheCtx) cacheCtx.restore();
+    }
   }
   
   // 设置当前工具
