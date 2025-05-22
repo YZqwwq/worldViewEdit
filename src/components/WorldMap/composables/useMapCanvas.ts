@@ -2,7 +2,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watchEffect, provide, inject
 import type { Ref } from 'vue';
 import { useLayerManager, LAYER_MANAGER_KEY } from './useLayerManager';
 // 引入useWorldMapLayers
-import { useWorldMapLayers } from './useWorldMapLayers';
+import { useWorldMapLayers } from './useWorldMapLayersManage';
 // 引入useLayerTools
 import { useLayerTools, DrawToolType } from './useLayerTools';
 // 引入Layer类型
