@@ -45,6 +45,160 @@ export function createBackgroundLayer(
   return baseLayer;
 }
 
+// 定义normalpxMapLayer作为顶级导出函数
+export function normalpxMapLayer(
+  config: LayerConfig,
+  offsetX: Ref<number>,
+  offsetY: Ref<number>,
+  scale: Ref<number>,
+  mapId: string,
+  layerId: string = 'normalpxMap'
+): Layer {
+  try {
+    const baseLayer = createBaseLayer(config);
+    baseLayer.canvas.style.pointerEvents = 'auto';
+
+    // 全局缓存store
+    const mapCacheStore = useMapCacheStore();
+    let layerInitialized = false;
+
+    // 创建坐标转换工具实例
+    const coordTransform = useCoordinateTransform(offsetX, offsetY, scale);
+
+    // 🔧 修改为同步初始化，避免时序问题
+    function initializeDrawingLayer(): void {
+      if (layerInitialized) return;
+      
+      // 使用与地图相同的尺寸
+      const GRID_SIZE = 15;
+      const MAP_WIDTH = 360 * GRID_SIZE;
+      const MAP_HEIGHT = 180 * GRID_SIZE;
+      
+      console.log(`🚀 开始初始化动态绘图图层: ${layerId}`);
+      
+      // 检查缓存是否已经初始化
+      if (!mapCacheStore.isLayerInitialized(layerId)) {
+        console.log(`⚡ 同步初始化绘图图层缓存: ${layerId} (尺寸: ${MAP_WIDTH}x${MAP_HEIGHT})`);
+        
+        // 🔧 同步初始化透明图层
+        mapCacheStore.initializeLayer(layerId, MAP_WIDTH, MAP_HEIGHT);
+        
+        // 立即验证初始化结果
+        if (mapCacheStore.isLayerInitialized(layerId)) {
+          console.log(`✅ 图层 ${layerId} 缓存初始化成功`);
+          
+          // 确保图层是透明的
+          const cacheLayer = mapCacheStore.getLayer(layerId);
+          if (cacheLayer) {
+            const offscreenCanvas = cacheLayer.getOffscreenCanvas();
+            if (offscreenCanvas) {
+              const ctx = offscreenCanvas.getContext('2d');
+              if (ctx) {
+                // 清空为透明
+                ctx.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+                console.log(`🌟 图层 ${layerId} 已设置为透明状态`);
+              } else {
+                console.error(`❌ 无法获取图层 ${layerId} 的离屏Canvas上下文`);
+              }
+            } else {
+              console.error(`❌ 无法获取图层 ${layerId} 的离屏Canvas`);
+            }
+          } else {
+            console.error(`❌ 无法获取图层 ${layerId} 的缓存实例`);
+          }
+        } else {
+          console.error(`❌ 图层 ${layerId} 缓存初始化失败`);
+          return;
+        }
+      } else {
+        console.log(`✅ 图层 ${layerId} 缓存已存在，跳过初始化`);
+        const dims = mapCacheStore.getLayerDimensions(layerId);
+        // 验证缓存尺寸是否与预期地图尺寸匹配
+        if (dims.width !== MAP_WIDTH || dims.height !== MAP_HEIGHT) {
+          console.warn(`⚠️ 警告: 缓存尺寸(${dims.width}x${dims.height})与预期地图尺寸(${MAP_WIDTH}x${MAP_HEIGHT})不匹配!`);
+        }
+      }
+      
+      layerInitialized = true;
+      console.log(`✅ 动态绘图图层 ${layerId} 初始化完成`);
+    }
+
+    // 渲染方法直接从全局缓存store渲染
+    baseLayer.render = function() {
+      if (!baseLayer.visible.value) return;
+      const ctx = baseLayer.ctx;
+      
+      // 确保缓存已初始化 - 现在这应该总是已经初始化的
+      if (!layerInitialized) {
+        console.warn(`⚠️ 渲染时发现图层 ${layerId} 未初始化，立即初始化`);
+        initializeDrawingLayer();
+      }
+      
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      
+      // 获取地图实际尺寸常量
+      const GRID_SIZE = 15;
+      const MAP_WIDTH = 360 * GRID_SIZE;
+      const MAP_HEIGHT = 180 * GRID_SIZE;
+
+      // 确保使用与其他图层相同的变换方式
+      ctx.save();
+      // 使用坐标转换工具提供的变换参数，确保DPI处理一致性
+      const transformParams = coordTransform.getTransformParams();
+      ctx.setTransform(...transformParams);
+      
+      // 从缓存获取内容并渲染
+      try {
+        // 获取图层缓存
+        const cacheLayer = mapCacheStore.getLayer(layerId);
+        if (cacheLayer) {
+          // 检查缓存是否初始化
+          if (mapCacheStore.isLayerInitialized(layerId)) {
+            // 获取离屏Canvas和其尺寸
+            const offscreenCanvas = cacheLayer.getOffscreenCanvas();
+            
+            if (offscreenCanvas) {
+              // 直接绘制离屏缓存到当前上下文
+              ctx.drawImage(offscreenCanvas, 0, 0);
+            } else {
+              console.error('获取离屏Canvas失败');
+            }
+          } else {
+            console.error('缓存图层未初始化或无效');
+          }
+        } else {
+          console.error('无法获取缓存图层');
+        }
+      } catch (error) {
+        console.error('渲染缓存到画布时出错:', error);
+      }
+      
+      // 恢复之前的绘图状态
+      ctx.restore();
+    };
+
+    // 🔧 在图层创建后立即初始化缓存，确保绘制工具可以立即使用
+    console.log(`🎯 创建动态图层 ${layerId}，立即初始化缓存...`);
+    initializeDrawingLayer();
+
+    return baseLayer;
+  } catch (error) {
+    console.error('创建透明绘图图层时发生错误:', error);
+    // 返回一个默认图层
+    const fallbackLayer = createBaseLayer(config);
+    fallbackLayer.render = function() {
+      const ctx = fallbackLayer.ctx;
+      if (!ctx) return;
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.font = '20px Arial';
+      ctx.fillStyle = '#ff0000';
+      ctx.textAlign = 'center';
+      ctx.fillText('绘图图层创建失败', ctx.canvas.width / 2, ctx.canvas.height / 2);
+    };
+    return fallbackLayer;
+  }
+}
+
 // 创建地图绘制图层（双三插值实现）
 export function createMapLayer(
   config: LayerConfig,
@@ -120,134 +274,6 @@ export function createMapLayer(
       
       await mapCacheStore.loadImage(layerId, img);
       imageLoadedToCache = true;
-    }
-
-    function normalpxMapLayer(
-      config: LayerConfig,
-      offsetX: Ref<number>,
-      offsetY: Ref<number>,
-      scale: Ref<number>,
-      mapId: string,
-      layerId: string = 'normalpxMap'
-    ): Layer {
-      try {
-        const baseLayer = createBaseLayer(config);
-        baseLayer.canvas.style.pointerEvents = 'auto';
-
-        // 全局缓存store
-        const mapCacheStore = useMapCacheStore();
-        let layerInitialized = false;
-
-        // 创建坐标转换工具实例
-        const coordTransform = useCoordinateTransform(offsetX, offsetY, scale);
-
-        // 初始化透明绘图图层缓存
-        async function initializeDrawingLayer(): Promise<void> {
-          if (layerInitialized) return;
-          
-          // 使用与地图相同的尺寸
-          const GRID_SIZE = 15;
-          const MAP_WIDTH = 360 * GRID_SIZE;
-          const MAP_HEIGHT = 180 * GRID_SIZE;
-          
-          // 检查缓存是否已经初始化
-          if (!mapCacheStore.isLayerInitialized(layerId)) {
-            console.log(`初始化绘图图层缓存: ${layerId}`);
-            // 初始化透明图层
-            mapCacheStore.initializeLayer(layerId, MAP_WIDTH, MAP_HEIGHT);
-            
-            // 确保图层是透明的
-            const cacheLayer = mapCacheStore.getLayer(layerId);
-            if (cacheLayer) {
-              const offscreenCanvas = cacheLayer.getOffscreenCanvas();
-              if (offscreenCanvas) {
-                const ctx = offscreenCanvas.getContext('2d');
-                if (ctx) {
-                  // 清空为透明
-                  ctx.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
-                }
-              }
-            }
-          } else {
-            const dims = mapCacheStore.getLayerDimensions(layerId);
-            // 验证缓存尺寸是否与预期地图尺寸匹配
-            if (dims.width !== MAP_WIDTH || dims.height !== MAP_HEIGHT) {
-              console.warn(`警告: 缓存尺寸(${dims.width}x${dims.height})与预期地图尺寸(${MAP_WIDTH}x${MAP_HEIGHT})不匹配!`);
-            }
-          }
-          
-          layerInitialized = true;
-        }
-
-        // 渲染方法直接从全局缓存store渲染
-        baseLayer.render = async function() {
-          if (!baseLayer.visible.value) return;
-          const ctx = baseLayer.ctx;
-          
-          // 确保缓存已初始化
-          await initializeDrawingLayer();
-          ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-          
-          // 获取地图实际尺寸常量
-          const GRID_SIZE = 15;
-          const MAP_WIDTH = 360 * GRID_SIZE;
-          const MAP_HEIGHT = 180 * GRID_SIZE;
-
-          // 确保使用与其他图层相同的变换方式
-          ctx.save();
-          // 使用坐标转换工具提供的变换参数，确保DPI处理一致性
-          const transformParams = coordTransform.getTransformParams();
-          ctx.setTransform(...transformParams);
-          
-          // 从缓存获取内容并渲染
-          try {
-            // 获取图层缓存
-            const cacheLayer = mapCacheStore.getLayer(layerId);
-            if (cacheLayer) {
-              // 检查缓存是否初始化
-              if (mapCacheStore.isLayerInitialized(layerId)) {
-                // 获取离屏Canvas和其尺寸
-                const offscreenCanvas = cacheLayer.getOffscreenCanvas();
-                
-                if (offscreenCanvas) {
-                  // 直接绘制离屏缓存到当前上下文
-                  ctx.drawImage(offscreenCanvas, 0, 0);
-                } else {
-                  console.error('获取离屏Canvas失败');
-                }
-              } else {
-                console.error('缓存图层未初始化或无效');
-              }
-            } else {
-              console.error('无法获取缓存图层');
-            }
-          } catch (error) {
-            console.error('渲染缓存到画布时出错:', error);
-          }
-          
-          // 恢复之前的绘图状态
-          ctx.restore();
-        };
-
-        // 初始化绘图图层
-        initializeDrawingLayer().catch(err => console.error('绘图图层缓存初始化失败:', err));
-
-        return baseLayer;
-      } catch (error) {
-        console.error('创建透明绘图图层时发生错误:', error);
-        // 返回一个默认图层
-        const fallbackLayer = createBaseLayer(config);
-        fallbackLayer.render = function() {
-          const ctx = fallbackLayer.ctx;
-          if (!ctx) return;
-          ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-          ctx.font = '20px Arial';
-          ctx.fillStyle = '#ff0000';
-          ctx.textAlign = 'center';
-          ctx.fillText('绘图图层创建失败', ctx.canvas.width / 2, ctx.canvas.height / 2);
-        };
-        return fallbackLayer;
-      }
     }
 
     // 预加载图片（只保留一次底图不存在的处理逻辑）
@@ -451,7 +477,6 @@ export function createMapLayer(
     return fallbackLayer;
   }
 }
-
 
 // 创建网格图层
 export function createGridLayer(

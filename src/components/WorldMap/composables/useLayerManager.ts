@@ -1,6 +1,5 @@
 import { ref, onMounted, onBeforeUnmount, computed, shallowRef, provide, inject } from 'vue';
-import type { Ref } from 'vue';
-import type { Layer, LayerConfig } from './useLayerFactory';
+import type { Layer} from './useLayerFactory';
 
 // 定义图层管理器上下文的键
 export const LAYER_MANAGER_KEY = Symbol('layerManager');

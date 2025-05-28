@@ -125,7 +125,13 @@ const {
   setDrawLineWidth,
   setDrawTerrainType,
   undoDraw,
-  redoDraw
+  redoDraw,
+  // 新增的动态图层API
+  addDynamicDrawingLayer,
+  removeDynamicDrawingLayer,
+  // 新增的活动绘制图层API
+  setActiveDrawingLayer,
+  getActiveDrawingLayerId
 } = useMapCanvas(
   computed(() => viewState.value.isDarkMode),
   computed(() => viewState.value.offsetX),
@@ -272,6 +278,14 @@ defineExpose({
   undoDraw,
   redoDraw,
   renderLayer,
+  // 新增的动态图层API
+  addDynamicDrawingLayer,
+  removeDynamicDrawingLayer,
+  // 新增的活动绘制图层API
+  setActiveDrawingLayer,
+  getActiveDrawingLayerId,
+  // 暴露图层管理器，供MapManageTool使用
+  layerManager
 });
 </script>
 

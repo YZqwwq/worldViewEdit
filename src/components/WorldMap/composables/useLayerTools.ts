@@ -37,6 +37,8 @@ interface DrawState {
   operationId: number; // 添加操作ID，用于跟踪绘图操作
   lastDrawnPointIndex: number; // 记录最后绘制的点的索引
   hasUnprocessedUpdate?: boolean; // 标记是否有未处理的绘制更新
+  // 新增：当前活动绘制图层ID
+  activeLayerId: string;
 }
 
 // 定义返回值类型，供外部引用
@@ -67,6 +69,10 @@ export type LayerToolsReturnType = {
   canUndo: Ref<boolean>;
   canRedo: Ref<boolean>;
   historyCount: Ref<number>;
+  // 新增：设置活动绘制图层
+  setActiveDrawingLayer: (layerId: string) => void;
+  // 新增：获取当前活动绘制图层ID
+  getActiveLayerId: () => string;
 };
 
 // 定义Point类型，用于PathDataManager中的控制点
@@ -110,7 +116,9 @@ export function useLayerTools(
     animationFrameId: undefined, // 新增动画帧ID
     workerProcessing: false, // 记录Worker处理状态
     operationId: 0, // 初始化操作ID
-    lastDrawnPointIndex: -1 // 初始化最后绘制点索引
+    lastDrawnPointIndex: -1, // 初始化最后绘制点索引
+    // 新增：当前活动绘制图层ID
+    activeLayerId: layerId
   });
   
   // 地形类型到颜色的映射 - 移到这里，确保在DrawingEngine实例化前定义
@@ -142,20 +150,7 @@ export function useLayerTools(
     tool: drawState.value.currentTool,
   });
   
-  // 创建历史记录管理器实例，默认保留30步历史
   const historyManager = useLayerToolsHistory(30, layerId);
-  
-  // 同步设置到DrawingEngine和PathDataManager
-  function syncEngineOptions() {
-    const options = {
-      lineWidth: drawState.value.lineWidth,
-      color: getTerrainColor(drawState.value.terrainType),
-      tool: drawState.value.currentTool
-    };
-    
-    drawingEngine.setOptions(options);
-    // 同样更新PathDataManager选项
-  }
   
   // 防抖函数，用于控制绘图频率
   let drawThrottleTimer: number | null = null;
@@ -190,21 +185,43 @@ export function useLayerTools(
   
   // 获取当前绘图上下文，增强错误处理
   function getDrawingContext(): CanvasRenderingContext2D | null {
-    // 首先尝试通过传入的mapLayer获取
-    if (mapLayer.value && mapLayer.value.ctx) {
+    // 获取当前活动图层ID
+    const activeLayerId = drawState.value.activeLayerId;
+    
+    // 首先尝试通过传入的mapLayer获取（仅当活动图层是默认图层时）
+    if (activeLayerId === layerId && mapLayer.value && mapLayer.value.ctx) {
       return mapLayer.value.ctx;
     }
     
-    // 如果有图层管理器，尝试通过它获取
+    // 如果有图层管理器，尝试通过它获取活动图层
     if (layerManager) {
-      const layer = layerManager.getLayer(LAYER_IDS.MAP);
+      const layer = layerManager.getLayer(activeLayerId);
       if (layer && layer.ctx) {
-        console.log('通过图层管理器获取到地图图层上下文');
+        console.log(`通过图层管理器获取到活动图层上下文: ${activeLayerId}`);
         return layer.ctx;
       }
     }
     
-    console.warn('无法获取绘图上下文，绘图操作将被忽略');
+    // 兜底：如果活动图层不存在，尝试获取默认的MAP图层
+    if (activeLayerId !== LAYER_IDS.MAP) {
+      console.warn(`活动图层 ${activeLayerId} 不存在，尝试获取默认MAP图层`);
+      
+      // 首先尝试通过传入的mapLayer获取
+      if (mapLayer.value && mapLayer.value.ctx) {
+        return mapLayer.value.ctx;
+      }
+      
+      // 如果有图层管理器，尝试通过它获取MAP图层
+      if (layerManager) {
+        const layer = layerManager.getLayer(LAYER_IDS.MAP);
+        if (layer && layer.ctx) {
+          console.log('通过图层管理器获取到地图图层上下文');
+          return layer.ctx;
+        }
+      }
+    }
+    
+    console.warn(`无法获取活动图层 ${activeLayerId} 的绘图上下文，绘图操作将被忽略`);
     return null;
   }
   
@@ -327,7 +344,8 @@ export function useLayerTools(
   
   // 导出图片
   function toDataURL(type?: string) {
-    return mapCacheStore.toDataURL(layerId, type);
+    const activeLayerId = drawState.value.activeLayerId;
+    return mapCacheStore.toDataURL(activeLayerId, type);
   }
   
   /**
@@ -355,11 +373,15 @@ export function useLayerTools(
     drawState.value.lastTimestamp = now;
     
     // 获取当前活动的图层
-    const activeLayer = mapLayer.value || (layerManager ? layerManager.getLayer(LAYER_IDS.MAP) : null);
+    const activeLayerId = drawState.value.activeLayerId;
+    const activeLayer = layerManager ? layerManager.getLayer(activeLayerId) : 
+                       (activeLayerId === layerId ? mapLayer.value : null);
     
-    // 只处理地图绘制工具的事件，并且只在地图图层上绘制
+    console.log(`🎨 开始绘制 - 目标图层: ${activeLayerId}`);
+    
+    // 只处理地图绘制工具的事件，并且只在活动图层上绘制
     if (!activeLayer || !activeLayer.visible.value) {
-      console.log("❗ 绘制无效: 地图图层不存在或不可见");
+      console.log(`❗ 绘制无效: 活动图层 ${activeLayerId} 不存在或不可见`);
       return;
     }
     
@@ -382,15 +404,50 @@ export function useLayerTools(
       activeLayer.canvas.style.pointerEvents = 'auto';
     }
     
+    // 🔧 增强缓存初始化逻辑
+    console.log(`🔍 检查图层 ${activeLayerId} 的缓存状态...`);
+    
     // 检查缓存是否已初始化
-    if (!mapCacheStore.isLayerInitialized(layerId)) {
-      mapCacheStore.initializeLayer(layerId, MAP_WIDTH, MAP_HEIGHT);
+    if (!mapCacheStore.isLayerInitialized(activeLayerId)) {
+      console.log(`⚡ 初始化图层 ${activeLayerId} 的缓存...`);
+      mapCacheStore.initializeLayer(activeLayerId, MAP_WIDTH, MAP_HEIGHT);
+      
+      // 立即验证初始化是否成功
+      if (mapCacheStore.isLayerInitialized(activeLayerId)) {
+        console.log(`✅ 图层 ${activeLayerId} 缓存初始化成功`);
+      } else {
+        console.error(`❌ 图层 ${activeLayerId} 缓存初始化失败`);
+        return;
+      }
+    } else {
+      console.log(`✅ 图层 ${activeLayerId} 缓存已初始化`);
     }
     
-    // 检查是否需要加载底图
-    if (!cacheInitialized.value) {
+    // 验证缓存上下文是否可用
+    const cacheCtx = mapCacheStore.getContext(activeLayerId);
+    if (!cacheCtx) {
+      console.error(`❌ 无法获取图层 ${activeLayerId} 的缓存上下文`);
+      // 尝试重新初始化
+      console.log(`🔄 尝试重新初始化图层 ${activeLayerId} 的缓存...`);
+      mapCacheStore.initializeLayer(activeLayerId, MAP_WIDTH, MAP_HEIGHT);
+      
+      // 再次验证
+      const retryCtx = mapCacheStore.getContext(activeLayerId);
+      if (!retryCtx) {
+        console.error(`❌ 重新初始化后仍无法获取缓存上下文，绘制中止`);
+        drawState.value.isDrawing = false;
+        return;
+      } else {
+        console.log(`✅ 重新初始化成功，获得缓存上下文`);
+      }
+    } else {
+      console.log(`✅ 成功获取图层 ${activeLayerId} 的缓存上下文`);
+    }
+    
+    // 检查是否需要加载底图（仅对非动态图层）
+    if (!cacheInitialized.value && activeLayerId === layerId) {
       // 检查store中是否已有底图
-      if (mapCacheStore.hasBaseImage(layerId)) {
+      if (mapCacheStore.hasBaseImage(activeLayerId)) {
         cacheInitialized.value = true;
       } else {
         // 保存当前底图内容
@@ -399,9 +456,18 @@ export function useLayerTools(
         
         img.onload = () => {
           // 将底图加载到缓存
-          mapCacheStore.loadImage(layerId, img);
+          mapCacheStore.loadImage(activeLayerId, img);
           cacheInitialized.value = true;
         };
+      }
+    } else if (activeLayerId !== layerId) {
+      // 对于动态图层，确保缓存是透明的
+      console.log(`🌟 确保动态图层 ${activeLayerId} 的缓存是透明的`);
+      const transparentCtx = mapCacheStore.getContext(activeLayerId);
+      if (transparentCtx) {
+        // 确保动态图层开始时是透明的
+        transparentCtx.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+        console.log(`✅ 动态图层 ${activeLayerId} 已清空为透明状态`);
       }
     }
   }
@@ -470,7 +536,9 @@ export function useLayerTools(
     }
 
     // 获取当前活动的图层
-    const activeLayer = mapLayer.value || (layerManager ? layerManager.getLayer(LAYER_IDS.MAP) : null);
+    const activeLayerId = drawState.value.activeLayerId;
+    const activeLayer = layerManager ? layerManager.getLayer(activeLayerId) : 
+                       (activeLayerId === layerId ? mapLayer.value : null);
     
     // 只在Canvas存在时继续
     if (!activeLayer || !activeLayer.canvas) return;
@@ -558,7 +626,8 @@ export function useLayerTools(
       // 确保最后一次绘制完成
       const drawData = pathDatastore.getIncrementalDrawData();
       if (drawData.canDraw) {
-        const cacheCtx = mapCacheStore.getContext(layerId);
+        const activeLayerId = drawState.value.activeLayerId;
+        const cacheCtx = mapCacheStore.getContext(activeLayerId);
         if (cacheCtx) {
           // 根据当前工具类型处理最终绘制
           if (drawState.value.currentTool === 'eraser') {
@@ -622,20 +691,50 @@ export function useLayerTools(
   // 画笔工具实现
   function drawPen() {
     try {
+      const activeLayerId = drawState.value.activeLayerId;
+      console.log(`🖊️ 执行画笔绘制 - 目标图层: ${activeLayerId}`);
+      
       // 获取PathDataManager中的增量绘制数据
       const drawData = pathDatastore.getIncrementalDrawData();
       
       // 检查是否有足够的点进行绘制
-      if (!drawData.canDraw) return;
+      if (!drawData.canDraw) {
+        console.log(`⏸️ 暂无可绘制数据，跳过本次绘制`);
+        return;
+      }
       
-      const cacheCtx = mapCacheStore.getContext(layerId);
-      if (!cacheCtx) return;
+      console.log(`📊 绘制数据检查 - 点数: ${drawData.points.length}, 新段起始索引: ${drawData.newSegmentStartIndex}`);
+      
+      // 验证缓存状态
+      if (!mapCacheStore.isLayerInitialized(activeLayerId)) {
+        console.error(`❌ 绘制失败: 图层 ${activeLayerId} 缓存未初始化`);
+        return;
+      }
+      
+      const cacheCtx = mapCacheStore.getContext(activeLayerId);
+      if (!cacheCtx) {
+        console.error(`❌ 绘制失败: 无法获取图层 ${activeLayerId} 的缓存上下文`);
+        
+        // 尝试调试缓存状态
+        const cacheLayer = mapCacheStore.getLayer(activeLayerId);
+        console.log(`🔍 缓存层状态:`, {
+          exists: !!cacheLayer,
+          initialized: cacheLayer ? cacheLayer.isInitialized() : false,
+          dimensions: cacheLayer ? { width: cacheLayer.getWidth(), height: cacheLayer.getHeight() } : null
+        });
+        return;
+      }
+      
+      console.log(`✅ 缓存上下文获取成功，开始绘制...`);
       
       // 使用提取的绘制函数
       drawPathData(cacheCtx, drawData);
       
-    } catch (error) {
-      console.error('绘制笔画时出错:', error);
+      console.log(`✅ 画笔绘制完成 - 图层: ${activeLayerId}`);
+      
+    } catch (error: any) {
+      console.error('🚨 绘制笔画时出错:', error);
+      console.error('错误堆栈:', error.stack);
     }
   }
   
@@ -643,7 +742,8 @@ export function useLayerTools(
   function drawEraser(ctx: CanvasRenderingContext2D, event: PointerEvent) {
     try {
       // 获取缓存图层上下文
-      const cacheCtx = mapCacheStore.getContext(layerId);
+      const activeLayerId = drawState.value.activeLayerId;
+      const cacheCtx = mapCacheStore.getContext(activeLayerId);
       if (!cacheCtx) {
         console.error('无法获取缓存图层上下文');
         return;
@@ -784,9 +884,21 @@ export function useLayerTools(
   
   // 清空缓存
   function clearCache() {
-    mapCacheStore.clear(layerId);
+    const activeLayerId = drawState.value.activeLayerId;
+    mapCacheStore.clear(activeLayerId);
     cacheInitialized.value = false;
     refreshCanvas();
+  }
+  
+  // 设置活动绘制图层
+  function setActiveDrawingLayer(layerId: string) {
+    console.log(`设置活动绘制图层为: ${layerId}`);
+    drawState.value.activeLayerId = layerId;
+  }
+  
+  // 获取当前活动绘制图层ID
+  function getActiveLayerId() {
+    return drawState.value.activeLayerId;
   }
   
   // 导出接口 - 添加历史记录相关状态
@@ -813,6 +925,10 @@ export function useLayerTools(
     // 暴露历史记录状态
     canUndo: historyManager.canUndo,
     canRedo: historyManager.canRedo,
-    historyCount: historyManager.historyCount
+    historyCount: historyManager.historyCount,
+    // 新增：设置活动绘制图层
+    setActiveDrawingLayer,
+    // 新增：获取当前活动绘制图层ID
+    getActiveLayerId
   };
 }

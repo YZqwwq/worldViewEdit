@@ -8,10 +8,12 @@ import {
   createLocationLayer,
   createTerritoryLayer,
   createLabelLayer,
-  createCoordinateLayer
+  createCoordinateLayer,
+  normalpxMapLayer  // 正确导入 normalpxMapLayer
 } from './useLayers';
 import { LAYER_IDS } from './useMapCanvas';
 import type { Layer } from './useLayerFactory';
+import { useMapCacheStore } from '../utils/mapCacheStore';
 
 /**
  * 世界地图图层系统
@@ -76,6 +78,12 @@ export function useWorldMapLayers(props: {
     layerManager.toggleLayer(config.id, config.visible);
   });
   
+  // 添加全局变量引用
+  // 这些变量在初始化图层时会被设置
+  let offsetX: Ref<number> = ref(0);
+  let offsetY: Ref<number> = ref(0);
+  let scale: Ref<number> = ref(1);
+  
   /**
    * 创建并初始化所有图层
    * 
@@ -106,9 +114,9 @@ export function useWorldMapLayers(props: {
     // 解构视图属性
     const { 
       isDarkMode, 
-      offsetX, 
-      offsetY, 
-      scale,
+      offsetX: viewOffsetX, 
+      offsetY: viewOffsetY, 
+      scale: viewScale,
       mapData, 
       isDrawingConnection = ref(false),
       connectionStartId = ref(''),
@@ -141,9 +149,9 @@ export function useWorldMapLayers(props: {
       layers.push(createMapLayer(
         { id: LAYER_IDS.MAP, name: '地图', zIndex: 10 },
         isDarkMode,
-        offsetX,
-        offsetY,
-        scale,
+        viewOffsetX,
+        viewOffsetY,
+        viewScale,
         defaultMapId,
       ));
       
@@ -151,27 +159,27 @@ export function useWorldMapLayers(props: {
       layers.push(createTerritoryLayer(
         { id: LAYER_IDS.TERRITORY, name: '势力范围', zIndex: 20 },
         mapData,
-        offsetX,
-        offsetY,
-        scale
+        viewOffsetX,
+        viewOffsetY,
+        viewScale
       ));
       
       // 网格图层
       layers.push(createGridLayer(
         { id: LAYER_IDS.GRID, name: '网格', zIndex: 30 },
         isDarkMode,
-        offsetX,
-        offsetY,
-        scale
+        viewOffsetX,
+        viewOffsetY,
+        viewScale
       ));
       
       // 连接线图层
       layers.push(createConnectionLayer(
         { id: LAYER_IDS.CONNECTION, name: '连接线', zIndex: 40 },
         mapData,
-        offsetX,
-        offsetY,
-        scale,
+        viewOffsetX,
+        viewOffsetY,
+        viewScale,
         isDrawingConnection,
         connectionStartId,
         mouseX,
@@ -183,9 +191,9 @@ export function useWorldMapLayers(props: {
       layers.push(createLocationLayer(
         { id: LAYER_IDS.LOCATION, name: '位置', zIndex: 50 },
         mapData,
-        offsetX,
-        offsetY,
-        scale,
+        viewOffsetX,
+        viewOffsetY,
+        viewScale,
         currentLocationId
       ));
       
@@ -193,9 +201,9 @@ export function useWorldMapLayers(props: {
       layers.push(createLabelLayer(
         { id: LAYER_IDS.LABEL, name: '标签', zIndex: 60 },
         mapData,
-        offsetX,
-        offsetY,
-        scale,
+        viewOffsetX,
+        viewOffsetY,
+        viewScale,
         isDarkMode
       ));
       
@@ -203,9 +211,9 @@ export function useWorldMapLayers(props: {
       layers.push(createCoordinateLayer(
         { id: LAYER_IDS.COORDINATE, name: '坐标系', zIndex: 70 },
         isDarkMode,
-        offsetX,
-        offsetY,
-        scale
+        viewOffsetX,
+        viewOffsetY,
+        viewScale
       ));
       
       // 批量添加所有图层
@@ -221,6 +229,11 @@ export function useWorldMapLayers(props: {
         isLayersReady.value = true;
         console.log('所有图层初始化完成并已渲染');
       }, 100);
+      
+      // 保存关键视图属性的引用，供其他方法使用
+      offsetX = viewOffsetX;
+      offsetY = viewOffsetY;
+      scale = viewScale;
       
     } catch (error) {
       console.error('创建图层时出错:', error);
@@ -312,6 +325,118 @@ export function useWorldMapLayers(props: {
     }
   });
   
+  /**
+   * 添加动态绘图图层
+   * 
+   * @param name 图层名称
+   * @returns 生成的图层ID
+   */
+  function addDynamicDrawingLayer(name: string): string {
+    console.log('🎯 useWorldMapLayers: 开始添加动态绘图图层', {
+      name,
+      isLayersInitialized: isLayersInitialized.value
+    });
+    
+    if (!isLayersInitialized.value) {
+      throw new Error('图层系统未初始化，无法添加动态图层');
+    }
+    
+    // 创建唯一ID
+    const uniqueId = `normalpxMap_${Date.now()}`;
+    
+    try {
+      // 获取图层容器
+      const container = layerManager.parentElement.value;
+      if (!container) {
+        throw new Error('无法获取图层容器');
+      }
+      
+      console.log('🔍 useWorldMapLayers: 图层容器获取成功');
+      
+      // 获取当前最高zIndex并+1
+      const layers = layerManager.getAllLayers();
+      const maxZIndex = Math.max(...layers.map(l => l.zIndex), 0);
+      const newZIndex = maxZIndex + 10;
+      
+      console.log('📊 useWorldMapLayers: 图层层级计算', {
+        currentLayersCount: layers.length,
+        maxZIndex,
+        newZIndex
+      });
+      
+      // 创建新图层配置
+      const layerConfig = {
+        id: uniqueId,
+        name: name || `绘图图层 ${uniqueId.substring(uniqueId.length - 4)}`, 
+        zIndex: newZIndex
+      };
+      
+      console.log('⚙️ useWorldMapLayers: 准备创建图层', layerConfig);
+      
+      // 使用normalpxMapLayer创建透明绘图图层
+      const newLayer = normalpxMapLayer(
+        layerConfig,
+        offsetX,
+        offsetY,
+        scale,
+        props.mapId || '1',
+        uniqueId
+      );
+      
+      console.log('🎨 useWorldMapLayers: normalpxMapLayer 创建完成');
+      
+      // 添加到图层管理器
+      layerManager.addLayer(newLayer);
+      console.log(`✅ useWorldMapLayers: 已创建动态绘图图层: ${name} (${uniqueId})`);
+      
+      return uniqueId;
+    } catch (error) {
+      console.error('❌ useWorldMapLayers: 创建动态绘图图层失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 移除动态绘图图层
+   * 
+   * @param layerId 图层ID
+   * @returns 是否成功删除
+   */
+  function removeDynamicDrawingLayer(layerId: string): boolean {
+    if (!layerId.startsWith('normalpxMap_')) {
+      console.warn('只能删除动态绘图图层 (normalpxMap_)');
+      return false;
+    }
+    
+    try {
+      // 从图层管理器移除
+      layerManager.removeLayer(layerId);
+      
+      // 从缓存系统清理
+      const mapCacheStore = useMapCacheStore();
+      if (mapCacheStore.isLayerInitialized(layerId)) {
+        // 由于缓存store可能没有removeLayer方法，我们使用安全的方式清理
+        try {
+          // @ts-ignore - 临时忽略类型检查
+          if (typeof mapCacheStore.removeLayer === 'function') {
+            // @ts-ignore
+            mapCacheStore.removeLayer(layerId);
+          } else {
+            console.warn('缓存存储没有removeLayer方法，无法清理缓存');
+          }
+        } catch (e) {
+          console.warn('清理缓存失败:', e);
+        }
+      }
+      
+      console.log(`已移除动态绘图图层: ${layerId}`);
+      return true;
+    } catch (error) {
+      console.error(`移除动态绘图图层失败: ${layerId}`, error);
+      return false;
+    }
+  }
+  
   // 返回接口，确保图层管理器被正确暴露
   return {
     // 图层管理器实例
@@ -331,5 +456,8 @@ export function useWorldMapLayers(props: {
       renderLayer(id);
     },
     getLayerVisibility: (id: string) => layerManager.getLayerVisibility(id),
+    // 动态图层管理
+    addDynamicDrawingLayer,
+    removeDynamicDrawingLayer
   };
 } 

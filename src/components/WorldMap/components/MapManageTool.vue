@@ -4,7 +4,9 @@ import { useMapData } from '../composables/useMapData';
 import { LAYER_IDS } from '../composables/useMapCanvas';
 import FloatingPanel from './FloatingPanel.vue';
 import WorldMapCanvas from './WorldMapCanvas.vue';
-import { useLayerManagerContext, LAYER_MANAGER_KEY } from '../composables/useLayerManager';
+
+// 定义世界地图图层管理器的注入键
+const WORLD_LAYER_MANAGER_KEY = Symbol('worldLayerManager');
 
 // 接收父组件传递的画布引用
 const props = defineProps<{
@@ -14,58 +16,124 @@ const props = defineProps<{
 // 获取地图数据
 const mapData = useMapData();
 
-// 定义图层管理器接口类型
-interface LayerManagerLike {
+// 定义世界地图图层管理器接口类型，包含特化功能
+interface WorldLayerManagerLike {
   layerVisibility: { value: Record<string, boolean> };
   toggleLayer: (id: string, visible?: boolean) => void;
   getLayerVisibility: (id: string) => boolean;
   setLayersVisibility: (config: Record<string, boolean>) => void;
+  // 特化功能
+  addDynamicDrawingLayer?: (name: string) => string;
+  removeDynamicDrawingLayer?: (id: string) => boolean;
 }
 
-// 尝试直接从依赖注入获取图层管理器
-const injectedLayerManager = inject(LAYER_MANAGER_KEY);
+// 尝试直接从依赖注入获取世界地图图层管理器
+const worldLayerManager = inject<WorldLayerManagerLike>(WORLD_LAYER_MANAGER_KEY);
 
-// 尝试获取图层管理器，使用多种方式确保能获取到实例
-let layerManager: LayerManagerLike;
+// 获取图层管理器，优先使用世界地图特化管理器
+let layerManager: WorldLayerManagerLike;
 try {
-  if (injectedLayerManager) {
-    // 首选：使用注入的图层管理器
-    layerManager = injectedLayerManager as LayerManagerLike;
-    console.log('MapManageTool: 成功获取注入的图层管理器');
+  console.log('🔍 MapManageTool: 开始获取图层管理器...');
+  
+  if (worldLayerManager) {
+    // 首选：使用注入的世界地图图层管理器
+    layerManager = worldLayerManager;
+    console.log('✅ MapManageTool: 成功获取注入的世界地图图层管理器');
   } else if (props.mapCanvasRef) {
-    // 备选1：尝试从画布引用获取图层管理器，但需要额外检查
+    // 备选1：检查画布是否有动态图层方法
     const canvasRef = props.mapCanvasRef as any;
-    if (canvasRef && canvasRef.layerManager) {
-      layerManager = canvasRef.layerManager;
-      console.log('MapManageTool: 使用从mapCanvasRef获取的图层管理器');
-    } else {
-      throw new Error('mapCanvasRef存在但不包含layerManager');
-    }
-  } else {
-    // 备选2：尝试通过useLayerManagerContext获取
-    try {
-      layerManager = useLayerManagerContext() as LayerManagerLike;
-      console.log('MapManageTool: 通过context获取图层管理器');
-    } catch (e) {
-      // 最后备选：使用mapData中的适配实现
-      console.warn('MapManageTool: 无法获取图层管理器，将使用mapData中的适配实现');
-      // 创建适配器对象，转发对mapData的调用
-      layerManager = {
+    
+    console.log('🔍 MapManageTool: 检查画布引用功能...', {
+      hasAddMethod: typeof canvasRef.addDynamicDrawingLayer === 'function',
+      hasRemoveMethod: typeof canvasRef.removeDynamicDrawingLayer === 'function',
+      hasLayerManager: !!canvasRef.layerManager
+    });
+    
+    if (canvasRef && typeof canvasRef.addDynamicDrawingLayer === 'function') {
+      // 画布直接提供动态图层功能
+      const baseLayerManager = canvasRef.layerManager || {
         layerVisibility: computed(() => mapData.layerVisibility.value),
-        toggleLayer: (id: string, visible?: boolean) => mapData.toggleLayerVisibility(id),
-        getLayerVisibility: (id: string) => mapData.getLayerVisibility(id),
+        toggleLayer: (id: string, visible?: boolean) => {
+          if (canvasRef.showLayer && canvasRef.hideLayer) {
+            if (visible === undefined) {
+              visible = !mapData.getLayerVisibility(id);
+            }
+            if (visible) {
+              canvasRef.showLayer(id);
+            } else {
+              canvasRef.hideLayer(id);
+            }
+          } else {
+            mapData.toggleLayerVisibility(id);
+          }
+        },
+        getLayerVisibility: (id: string) => {
+          if (canvasRef.layerManager && typeof canvasRef.layerManager.getLayerVisibility === 'function') {
+            return canvasRef.layerManager.getLayerVisibility(id);
+          }
+          return mapData.getLayerVisibility(id);
+        },
         setLayersVisibility: (config: Record<string, boolean>) => {
           Object.entries(config).forEach(([id, visible]) => {
-            if (mapData.getLayerVisibility(id) !== visible) {
-              mapData.toggleLayerVisibility(id);
+            if (baseLayerManager.getLayerVisibility(id) !== visible) {
+              baseLayerManager.toggleLayer(id, visible);
             }
           });
         }
       };
+      
+      // 增强图层管理器 - 直接从画布获取动态图层方法
+      layerManager = {
+        ...baseLayerManager,
+        addDynamicDrawingLayer: canvasRef.addDynamicDrawingLayer.bind(canvasRef),
+        removeDynamicDrawingLayer: canvasRef.removeDynamicDrawingLayer.bind(canvasRef)
+      };
+      
+      console.log('✅ MapManageTool: 使用画布提供的动态图层功能');
+    } else if (canvasRef && canvasRef.layerManager) {
+      // 兼容处理：获取基础图层管理器，但需要检查是否有动态图层方法
+      const baseLM = canvasRef.layerManager;
+      
+      // 检查基础图层管理器是否有动态图层方法
+      if (typeof baseLM.addDynamicDrawingLayer === 'function') {
+        layerManager = baseLM;
+        console.log('✅ MapManageTool: 使用图层管理器自带的动态图层功能');
+      } else {
+        // 如果基础图层管理器没有动态图层方法，但画布有，则包装它
+        if (typeof canvasRef.addDynamicDrawingLayer === 'function') {
+          layerManager = {
+            ...baseLM,
+            addDynamicDrawingLayer: canvasRef.addDynamicDrawingLayer.bind(canvasRef),
+            removeDynamicDrawingLayer: canvasRef.removeDynamicDrawingLayer.bind(canvasRef)
+          };
+          console.log('✅ MapManageTool: 使用包装后的图层管理器（增加动态图层功能）');
+        } else {
+          layerManager = baseLM;
+          console.log('⚠️ MapManageTool: 使用基础图层管理器（无动态图层功能）');
+        }
+      }
+    } else {
+      throw new Error('mapCanvasRef存在但不包含有效的图层管理器或动态图层方法');
     }
+  } else {
+    // 兜底：使用mapData中的适配实现
+    console.warn('⚠️ MapManageTool: 无法获取世界地图图层管理器，将使用基本适配实现');
+    // 创建适配器对象
+    layerManager = {
+      layerVisibility: computed(() => mapData.layerVisibility.value),
+      toggleLayer: (id: string, visible?: boolean) => mapData.toggleLayerVisibility(id),
+      getLayerVisibility: (id: string) => mapData.getLayerVisibility(id),
+      setLayersVisibility: (config: Record<string, boolean>) => {
+        Object.entries(config).forEach(([id, visible]) => {
+          if (mapData.getLayerVisibility(id) !== visible) {
+            mapData.toggleLayerVisibility(id);
+          }
+        });
+      }
+    };
   }
 } catch (e) {
-  console.error('MapManageTool: 获取图层管理器失败，将使用基本适配实现', e);
+  console.error('❌ MapManageTool: 获取图层管理器失败，将使用基本适配实现', e);
   // 出错时创建最基本的适配器对象
   layerManager = {
     layerVisibility: computed(() => mapData.layerVisibility.value),
@@ -80,6 +148,21 @@ try {
     }
   };
 }
+
+// 检查是否支持动态图层功能
+const supportsDynamicLayers = computed(() => {
+  const hasAddMethod = typeof layerManager.addDynamicDrawingLayer === 'function';
+  const hasRemoveMethod = typeof layerManager.removeDynamicDrawingLayer === 'function';
+  const result = hasAddMethod && hasRemoveMethod;
+  
+  console.log('🔍 MapManageTool: 动态图层支持检查', {
+    hasAddMethod,
+    hasRemoveMethod,
+    supportsDynamicLayers: result
+  });
+  
+  return result;
+});
 
 // 图层可见性状态
 const layerVisibility = computed(() => layerManager.layerVisibility.value);
@@ -106,9 +189,28 @@ const defaultLayers = [
 ];
 
 // 动态图层列表
-const dynamicLayers = ref<{ id: string; name: string }[]>([
-  // 初始为空，将通过添加图层功能填充
-]);
+const dynamicLayers = ref<{ id: string; name: string }[]>([]);
+
+// 当前活动绘制图层ID
+const activeDrawingLayerId = ref<string>(LAYER_IDS.MAP);
+
+// 获取所有可绘制的图层（预设图层中的地图绘制图层 + 动态图层）
+const drawableLayers = computed(() => {
+  const layers = [
+    { id: LAYER_IDS.MAP, name: '地图绘制', type: 'default' }
+  ];
+  
+  // 添加动态图层
+  dynamicLayers.value.forEach(layer => {
+    layers.push({ 
+      id: layer.id, 
+      name: layer.name, 
+      type: 'dynamic' 
+    });
+  });
+  
+  return layers;
+});
 
 // 切换图层可见性
 function toggleLayerVisibility(layerId: string) {
@@ -149,22 +251,99 @@ function closeAddLayerDialog() {
 
 // 添加新图层
 function addNewLayer() {
-  // 这里先占位，实际添加图层逻辑会在后续实现
-  if (newLayerName.value.trim()) {
+  if (!newLayerName.value.trim()) return;
+  
+  console.log('🎨 MapManageTool: 开始创建新图层', {
+    layerName: newLayerName.value,
+    supportsDynamicLayers: supportsDynamicLayers.value,
+    hasAddMethod: typeof layerManager.addDynamicDrawingLayer === 'function'
+  });
+  
+  if (supportsDynamicLayers.value && layerManager.addDynamicDrawingLayer) {
+    try {
+      console.log('🚀 MapManageTool: 调用动态图层创建方法...');
+      
+      // 使用特化管理器添加动态绘图图层
+      const newLayerId = layerManager.addDynamicDrawingLayer(newLayerName.value);
+      
+      console.log('✅ MapManageTool: 动态图层创建成功', {
+        layerId: newLayerId,
+        layerName: newLayerName.value
+      });
+      
+      dynamicLayers.value.push({
+        id: newLayerId,
+        name: newLayerName.value
+      });
+      
+      // 确保新图层可见
+      layerManager.toggleLayer(newLayerId, true);
+      
+      // 自动切换到新创建的图层作为绘制目标
+      setActiveDrawingLayer(newLayerId);
+      
+      // 重绘画布以立即显示新图层
+      if (props.mapCanvasRef) {
+        props.mapCanvasRef.drawMap();
+      }
+      
+      console.log(`✅ 已创建动态图层: ${newLayerName.value}(${newLayerId})`);
+    } catch (e) {
+      console.error('❌ 创建动态图层失败:', e);
+    }
+  } else {
+    // 模拟创建（仅UI展示，无实际功能）
+    console.warn('⚠️ 当前环境不支持动态图层创建，仅添加UI占位');
     const newLayerId = `normalpxMap_${Date.now()}`;
     dynamicLayers.value.push({
       id: newLayerId,
       name: newLayerName.value
     });
-    // 关闭对话框
-    closeAddLayerDialog();
+    
+    // 模拟情况下也切换到新图层
+    setActiveDrawingLayer(newLayerId);
   }
+  
+  // 关闭对话框
+  closeAddLayerDialog();
 }
 
 // 删除图层
 function deleteLayer(layerId: string) {
-  // 这里先占位，实际删除图层逻辑会在后续实现
-  dynamicLayers.value = dynamicLayers.value.filter(layer => layer.id !== layerId);
+  if (supportsDynamicLayers.value && layerManager.removeDynamicDrawingLayer) {
+    try {
+      // 使用特化管理器删除动态绘图图层
+      const success = layerManager.removeDynamicDrawingLayer(layerId);
+      if (success) {
+        dynamicLayers.value = dynamicLayers.value.filter(layer => layer.id !== layerId);
+        
+        // 如果删除的是当前活动绘制图层，切换回默认图层
+        if (activeDrawingLayerId.value === layerId) {
+          setActiveDrawingLayer(LAYER_IDS.MAP);
+        }
+        
+        console.log(`已删除动态图层: ${layerId}`);
+        
+        // 重绘画布以反映更改
+        if (props.mapCanvasRef) {
+          props.mapCanvasRef.drawMap();
+        }
+      } else {
+        console.error(`删除动态图层失败: ${layerId}`);
+      }
+    } catch (e) {
+      console.error('删除动态图层失败:', e);
+    }
+  } else {
+    // 模拟删除（仅UI展示）
+    console.warn('当前环境不支持动态图层删除，仅移除UI项');
+    dynamicLayers.value = dynamicLayers.value.filter(layer => layer.id !== layerId);
+    
+    // 如果删除的是当前活动绘制图层，切换回默认图层
+    if (activeDrawingLayerId.value === layerId) {
+      setActiveDrawingLayer(LAYER_IDS.MAP);
+    }
+  }
 }
 
 // 设置所有预设图层可见性
@@ -233,6 +412,17 @@ function showAllDynamicLayers() {
 function hideAllDynamicLayers() {
   setAllDynamicLayersVisibility(false);
 }
+
+// 设置活动绘制图层
+function setActiveDrawingLayer(layerId: string) {
+  activeDrawingLayerId.value = layerId;
+  
+  // 如果有画布引用且提供了设置活动图层的方法，调用它
+  if (props.mapCanvasRef && props.mapCanvasRef.setActiveDrawingLayer) {
+    props.mapCanvasRef.setActiveDrawingLayer(layerId);
+    console.log(`已切换绘制目标图层到: ${layerId}`);
+  }
+}
 </script>
 
 <template>
@@ -245,6 +435,29 @@ function hideAllDynamicLayers() {
   >
     <!-- 图层管理器内容 -->
     <div class="layer-manager-content">
+      <!-- 绘制目标图层选择器 -->
+      <div class="drawing-target-section">
+        <div class="section-header">
+          <span class="section-title">绘制目标图层</span>
+        </div>
+        <div class="drawing-target-selector">
+          <select 
+            v-model="activeDrawingLayerId" 
+            @change="setActiveDrawingLayer(activeDrawingLayerId)"
+            class="layer-select"
+          >
+            <option 
+              v-for="layer in drawableLayers" 
+              :key="layer.id" 
+              :value="layer.id"
+            >
+              {{ layer.name }} 
+              <span v-if="layer.type === 'dynamic'">(动态)</span>
+            </option>
+          </select>
+        </div>
+      </div>
+      
       <!-- 预设图层部分 -->
       <div class="layer-section">
         <!-- 预设图层列表标题栏 -->
@@ -368,6 +581,44 @@ function hideAllDynamicLayers() {
   display: flex;
   flex-direction: column;
   gap: 15px;
+}
+
+// 绘制目标图层选择器
+.drawing-target-section {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.section-header {
+  background: #f0f7ff;
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+.section-title {
+  font-weight: 500;
+  font-size: 13px;
+  color: #333;
+}
+
+.drawing-target-selector {
+  padding: 8px;
+}
+
+.layer-select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+  background: white;
+  cursor: pointer;
+}
+
+.layer-select:focus {
+  outline: none;
+  border-color: #4a6daf;
 }
 
 // 图层部分
@@ -621,13 +872,31 @@ function hideAllDynamicLayers() {
 
 /* 暗色模式样式 */
 :deep(.dark-mode) {
-  .layer-section {
+  .drawing-target-section {
     border-color: #333;
   }
 
-  .layer-list-header {
+  .section-header {
     background: #2a2a2a;
-    border-bottom: 1px solid #333;
+    border-bottom-color: #333;
+  }
+
+  .section-title {
+    color: #eee;
+  }
+
+  .layer-select {
+    background: #333;
+    border-color: #444;
+    color: #eee;
+  }
+
+  .layer-select:focus {
+    border-color: #3a5d9f;
+  }
+
+  .layer-section {
+    border-color: #333;
   }
 
   .layer-item:hover {

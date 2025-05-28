@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, onBeforeUnmount, watchEffect, provide, inject } from 'vue';
+import { ref, computed, onBeforeUnmount,inject } from 'vue';
 import type { Ref } from 'vue';
 import { useLayerManager, LAYER_MANAGER_KEY } from './useLayerManager';
 // 引入useWorldMapLayers
@@ -6,7 +6,7 @@ import { useWorldMapLayers } from './useWorldMapLayersManage';
 // 引入useLayerTools
 import { useLayerTools, DrawToolType } from './useLayerTools';
 // 引入Layer类型
-import { Layer, getMapRect } from './useLayerFactory';
+import { Layer} from './useLayerFactory';
 
 // 图层ID常量
 export const LAYER_IDS = {
@@ -206,6 +206,32 @@ export function useMapCanvas(
     drawTools.redo();
   };
   
+  // 设置活动绘制图层
+  const setActiveDrawingLayer = (layerId: string) => {
+    drawTools.setActiveDrawingLayer(layerId);
+  };
+  
+  // 获取当前活动绘制图层ID
+  const getActiveDrawingLayerId = () => {
+    return drawTools.getActiveLayerId();
+  };
+  
+  // 添加特化方法 - 添加动态绘图图层
+  function addDynamicDrawingLayer(name: string): string {
+    if (worldMapLayers.addDynamicDrawingLayer) {
+      return worldMapLayers.addDynamicDrawingLayer(name);
+    }
+    throw new Error('特化图层系统未提供动态图层创建功能');
+  }
+
+  // 添加特化方法 - 移除动态绘图图层
+  function removeDynamicDrawingLayer(layerId: string): boolean {
+    if (worldMapLayers.removeDynamicDrawingLayer) {
+      return worldMapLayers.removeDynamicDrawingLayer(layerId);
+    }
+    return false;
+  }
+  
   // 销毁和清理
   onBeforeUnmount(() => {
     window.removeEventListener('resize', handleResize);
@@ -243,7 +269,15 @@ export function useMapCanvas(
     setDrawLineWidth,
     setDrawTerrainType,
     undoDraw,
-    redoDraw
+    redoDraw,
+    
+    // 新增动态图层API
+    addDynamicDrawingLayer,
+    removeDynamicDrawingLayer,
+    
+    // 新增活动绘制图层API
+    setActiveDrawingLayer,
+    getActiveDrawingLayerId
   };
 }
 
